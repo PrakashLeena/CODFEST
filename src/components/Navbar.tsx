@@ -39,10 +39,7 @@ export default function Navbar() {
   const roleLinks = [
     ...(role === "admin" ? [
       { href: "/bracket", label: "Bracket" },
-      { href: "/livescore", label: "Live Score", badge: "LIVE" },
-      { href: "/scoreboard", label: "Killfeed", badge: "LIVE" },
-      { href: "/live-server", label: "Live Server", badge: "LIVE" },
-      { href: "/admin", label: "Admin" }
+      { href: "/admin", label: "Admin" },
     ] : []),
   ];
 
