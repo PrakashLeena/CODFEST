@@ -18,42 +18,37 @@ export async function GET() {
       return NextResponse.json({ error: "Admin access required" }, { status: 403 });
     }
 
-    // 1. Fetch teams with relations (with safe fallback if join fails)
-    let teamsData: any[] = [];
-    
-    const { data: teamsWithRel, error: relErr } = await db()
-      .from("teams")
-      .select("*, captain:users!teams_captain_id_fkey(name, email), players(*)")
-      .order("created_at", { ascending: false });
+    // 1. Fetch teams, players, and users
+    const [{ data: teams, error: tErr }, { data: players, error: pErr }, { data: users }] = await Promise.all([
+      db().from("teams").select("*").order("created_at", { ascending: false }),
+      db().from("players").select("*"),
+      db().from("users").select("id, name, email"),
+    ]);
 
-    if (relErr || !teamsWithRel) {
-      console.warn("Teams relation query warning, falling back to separate queries:", relErr?.message);
-      // Fallback: query teams and players separately
-      const [{ data: rawTeams }, { data: rawPlayers }] = await Promise.all([
-        db().from("teams").select("*").order("created_at", { ascending: false }),
-        db().from("players").select("*"),
-      ]);
+    if (tErr) {
+      console.error("Teams query error:", tErr);
+      return NextResponse.json({ error: tErr.message }, { status: 500 });
+    }
 
-      const playersByTeam: Record<string, any[]> = {};
-      for (const p of rawPlayers ?? []) {
-        if (p.team_id) {
-          if (!playersByTeam[p.team_id]) playersByTeam[p.team_id] = [];
-          playersByTeam[p.team_id].push(p);
+    const userMap = new Map((users ?? []).map((u: any) => [u.id, u]));
+    const playersByTeam = new Map<string, any[]>();
+
+    for (const p of players ?? []) {
+      if (p.team_id) {
+        if (!playersByTeam.has(p.team_id)) {
+          playersByTeam.set(p.team_id, []);
         }
+        playersByTeam.get(p.team_id)!.push(p);
       }
-
-      teamsData = (rawTeams ?? []).map((t: any) => ({
-        ...t,
-        players: playersByTeam[t.id] ?? [],
-      }));
-    } else {
-      teamsData = teamsWithRel;
     }
 
     // ──────────────────────────────────────────────
     // SHEET 1: Teams Summary
     // ──────────────────────────────────────────────
-    const teamsRows = teamsData.map((t: any, i: number) => {
+    const teamsRows = (teams ?? []).map((t: any, i: number) => {
+      const captain = t.captain_id ? userMap.get(t.captain_id) : null;
+      const teamPlayers = playersByTeam.get(t.id) ?? [];
+
       let createdStr = "—";
       try {
         if (t.created_at) {
@@ -67,19 +62,19 @@ export async function GET() {
         "#": i + 1,
         "Team Name": t.team_name ?? "—",
         Status: String(t.status ?? "pending").toUpperCase(),
-        "Captain Name": t.captain?.name ?? "—",
-        "Captain Email": t.captain?.email ?? t.email ?? "—",
-        Phone: t.phone ?? "—",
+        "Captain Name": captain?.name ?? t.captain_name ?? "—",
+        "Captain Email": captain?.email ?? t.email ?? "—",
+        "Contact Phone": t.phone ?? "—",
         Discord: t.discord ?? "—",
         WhatsApp: t.whatsapp ?? "—",
-        "Players Count": Array.isArray(t.players) ? t.players.length : 0,
+        "Total Members": teamPlayers.length,
         Points: Number(t.points) || 0,
         Wins: Number(t.wins) || 0,
         Losses: Number(t.losses) || 0,
         Draws: Number(t.draws) || 0,
-        "Maps Won": Number(t.maps_won) || 0,
-        "Maps Lost": Number(t.maps_lost) || 0,
-        "Registered At": createdStr,
+        "Score / Maps Won": Number(t.maps_won) || 0,
+        "Opp Score / Maps Lost": Number(t.maps_lost) || 0,
+        "Registered On": createdStr,
       };
     });
 
@@ -89,28 +84,82 @@ export async function GET() {
     const playerRows: Record<string, string | number>[] = [];
     let playerIndex = 1;
 
-    for (const t of teamsData) {
-      const pList = Array.isArray(t.players) ? t.players : [];
-      for (const p of pList) {
-        let joinedStr = "—";
-        try {
-          if (p.created_at) {
-            joinedStr = new Date(p.created_at).toLocaleString("en-IN", { timeZone: "Asia/Kolkata" });
-          }
-        } catch {
-          joinedStr = String(p.created_at ?? "—");
-        }
-
+    for (const t of teams ?? []) {
+      const teamPlayers = playersByTeam.get(t.id) ?? [];
+      for (const p of teamPlayers) {
         playerRows.push({
           "#": playerIndex++,
           "Team Name": t.team_name ?? "—",
           "Team Status": String(t.status ?? "pending").toUpperCase(),
-          "Player Name": p.player_name ?? "—",
-          "In-Game ID / IGN": p.game_id ?? "—",
+          "Player / Member Name": p.player_name ?? "—",
+          "In-Game ID (IGN)": p.game_id ?? "—",
+          "Player Email": p.email ?? "—",
+          "Player Phone": p.phone ?? "—",
+          "IM Number": p.im_number ?? "—",
           Role: p.is_substitute ? "Substitute" : "Main Roster",
-          "Joined At": joinedStr,
         });
       }
+    }
+
+    // ──────────────────────────────────────────────
+    // SHEET 3: Team-by-Team Rosters
+    // ──────────────────────────────────────────────
+    const rosterRows: Record<string, string>[] = [];
+    for (const t of teams ?? []) {
+      const captain = t.captain_id ? userMap.get(t.captain_id) : null;
+      const teamPlayers = playersByTeam.get(t.id) ?? [];
+
+      rosterRows.push({
+        Team: `TEAM: ${String(t.team_name).toUpperCase()}`,
+        Status: `[ ${String(t.status).toUpperCase()} ]`,
+        "Captain / Contact": captain?.name ? `${captain.name} (${captain.email})` : (t.email || "—"),
+        Phone: t.phone || "—",
+        "Member Name": "",
+        "In-Game ID": "",
+        "Member Email": "",
+        "Member Phone": "",
+        Role: "",
+      });
+
+      if (teamPlayers.length === 0) {
+        rosterRows.push({
+          Team: "",
+          Status: "",
+          "Captain / Contact": "",
+          Phone: "",
+          "Member Name": "No players registered yet",
+          "In-Game ID": "",
+          "Member Email": "",
+          "Member Phone": "",
+          Role: "",
+        });
+      } else {
+        teamPlayers.forEach((p, pIdx) => {
+          rosterRows.push({
+            Team: "",
+            Status: "",
+            "Captain / Contact": "",
+            Phone: "",
+            "Member Name": `${pIdx + 1}. ${p.player_name}`,
+            "In-Game ID": p.game_id || "—",
+            "Member Email": p.email || "—",
+            "Member Phone": p.phone || "—",
+            Role: p.is_substitute ? "Substitute" : "Main Roster",
+          });
+        });
+      }
+
+      rosterRows.push({
+        Team: "",
+        Status: "",
+        "Captain / Contact": "",
+        Phone: "",
+        "Member Name": "",
+        "In-Game ID": "",
+        "Member Email": "",
+        "Member Phone": "",
+        Role: "",
+      });
     }
 
     // ──────────────────────────────────────────────
@@ -123,37 +172,45 @@ export async function GET() {
     );
     wsTeams["!cols"] = [
       { wch: 4 },  // #
-      { wch: 26 }, // Team Name
+      { wch: 28 }, // Team Name
       { wch: 12 }, // Status
-      { wch: 22 }, // Captain Name
-      { wch: 28 }, // Captain Email
-      { wch: 15 }, // Phone
+      { wch: 24 }, // Captain Name
+      { wch: 32 }, // Captain Email
+      { wch: 16 }, // Phone
       { wch: 18 }, // Discord
       { wch: 16 }, // WhatsApp
-      { wch: 14 }, // Players Count
+      { wch: 14 }, // Total Members
       { wch: 8 },  // Points
       { wch: 6 },  // Wins
       { wch: 8 },  // Losses
       { wch: 6 },  // Draws
-      { wch: 10 }, // Maps Won
-      { wch: 10 }, // Maps Lost
-      { wch: 22 }, // Registered At
+      { wch: 20 }, // Score / Maps Won
+      { wch: 22 }, // Opp Score / Maps Lost
+      { wch: 24 }, // Registered On
     ];
-    XLSX.utils.book_append_sheet(wb, wsTeams, "Teams");
+    XLSX.utils.book_append_sheet(wb, wsTeams, "Teams Summary");
 
     const wsPlayers = XLSX.utils.json_to_sheet(
       playerRows.length ? playerRows : [{ "#": 1, "Team Name": "No players registered yet" }]
     );
     wsPlayers["!cols"] = [
       { wch: 4 },  // #
-      { wch: 26 }, // Team Name
+      { wch: 28 }, // Team Name
       { wch: 14 }, // Team Status
-      { wch: 26 }, // Player Name
-      { wch: 22 }, // In-Game ID
-      { wch: 14 }, // Role
-      { wch: 22 }, // Joined At
+      { wch: 28 }, // Player Name
+      { wch: 24 }, // In-Game ID
+      { wch: 30 }, // Player Email
+      { wch: 18 }, // Player Phone
+      { wch: 16 }, // IM Number
+      { wch: 16 }, // Role
     ];
-    XLSX.utils.book_append_sheet(wb, wsPlayers, "Players");
+    XLSX.utils.book_append_sheet(wb, wsPlayers, "All Players");
+
+    const wsRosters = XLSX.utils.json_to_sheet(rosterRows);
+    wsRosters["!cols"] = [
+      { wch: 32 }, { wch: 16 }, { wch: 36 }, { wch: 16 }, { wch: 28 }, { wch: 22 }, { wch: 30 }, { wch: 18 }, { wch: 16 }
+    ];
+    XLSX.utils.book_append_sheet(wb, wsRosters, "Team Rosters");
 
     // Output binary buffer as Uint8Array (compatible with all Response environments)
     const arrayBuffer = XLSX.write(wb, { type: "array", bookType: "xlsx" });
