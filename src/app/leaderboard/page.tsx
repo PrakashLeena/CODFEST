@@ -69,10 +69,16 @@ export default function LeaderboardPage() {
 
   const load = useCallback(async () => {
     try {
-      const res = await fetch("/api/leaderboard", { cache: "no-store" });
+      const res = await fetch(`/api/leaderboard?t=${Date.now()}`, {
+        cache: "no-store",
+        headers: {
+          "Cache-Control": "no-cache, no-store, must-revalidate",
+          Pragma: "no-cache",
+        },
+      });
       const json = await res.json();
-      setRows(json.leaderboard ?? []);
-      setClashes(json.clashes ?? []);
+      if (json.leaderboard) setRows(json.leaderboard);
+      if (json.clashes) setClashes(json.clashes);
     } catch {
       // silent fallback
     } finally {
@@ -82,16 +88,16 @@ export default function LeaderboardPage() {
 
   useEffect(() => {
     load();
+    const interval = setInterval(load, 2500);
+    return () => clearInterval(interval);
   }, [load]);
 
-  useSocketEvents(["leaderboard:updated", "match:finished", "match:live_score"], (_e, payload) => {
-    if (payload?.leaderboard) {
-      setRows(payload.leaderboard);
-      setLoading(false);
-    } else {
+  useSocketEvents(
+    ["leaderboard:updated", "match:finished", "match:live_score", "match:clash_updated", "bracket:updated"],
+    () => {
       load();
     }
-  });
+  );
 
   const nextSlide = useCallback(() => {
     if (clashes.length <= 1) return;

@@ -3,6 +3,7 @@ import { db } from "@/lib/supabase";
 import { getLeaderboard, MATCH_SELECT } from "@/lib/standings";
 
 export const dynamic = "force-dynamic";
+export const revalidate = 0;
 
 export async function GET() {
   const [leaderboard, { data: clashes }] = await Promise.all([
@@ -15,9 +16,19 @@ export async function GET() {
       .order("created_at", { ascending: false }),
   ]);
 
-  return NextResponse.json({
-    leaderboard,
-    clashes: clashes ?? [],
-  });
+  return NextResponse.json(
+    {
+      leaderboard: leaderboard ?? [],
+      clashes: clashes ?? [],
+    },
+    {
+      headers: {
+        "Cache-Control": "no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0",
+        "Pragma": "no-cache",
+        "Expires": "0",
+      },
+    }
+  );
 }
+
 

@@ -5,7 +5,7 @@ const WIN_POINTS = 3;
 const DRAW_POINTS = 1;
 
 /**
- * Recomputes a team's full standing from every finished match it played.
+ * Recomputes a team's full standing from every finished or scored match it played.
  * Idempotent by design — safe to call again after an admin override.
  */
 export async function recalcTeamStats(teamIds: (string | null)[]) {
@@ -13,8 +13,8 @@ export async function recalcTeamStats(teamIds: (string | null)[]) {
   for (const teamId of ids) {
     const { data: matches } = await db()
       .from("matches")
-      .select("team1_id, team2_id, final_score1, final_score2, winner_id")
-      .eq("status", "finished")
+      .select("team1_id, team2_id, final_score1, final_score2, winner_id, status")
+      .in("status", ["finished", "live"])
       .or(`team1_id.eq.${teamId},team2_id.eq.${teamId}`);
 
     let wins = 0,
@@ -29,10 +29,16 @@ export async function recalcTeamStats(teamIds: (string | null)[]) {
       const opp = (isTeam1 ? m.final_score2 : m.final_score1) ?? 0;
       mapsWon += own;
       mapsLost += opp;
-      if (m.winner_id === teamId) wins++;
-      else if (m.winner_id === null) draws++;
-      else losses++;
+      if (m.status === "finished") {
+        if (m.winner_id === teamId) wins++;
+        else if (m.winner_id === null && (m.final_score1 != null || m.final_score2 != null)) draws++;
+        else if (m.winner_id != null && m.winner_id !== teamId) losses++;
+      }
     }
+
+    // Points calculation: use total game score if present, otherwise calculate by match wins/draws
+    const matchPts = wins * WIN_POINTS + draws * DRAW_POINTS;
+    const points = mapsWon > 0 ? mapsWon : matchPts;
 
     await db()
       .from("teams")
@@ -42,7 +48,7 @@ export async function recalcTeamStats(teamIds: (string | null)[]) {
         draws,
         maps_won: mapsWon,
         maps_lost: mapsLost,
-        points: wins * WIN_POINTS + draws * DRAW_POINTS,
+        points,
       })
       .eq("id", teamId);
   }
@@ -51,8 +57,8 @@ export async function recalcTeamStats(teamIds: (string | null)[]) {
 export async function getLeaderboard() {
   const { data } = await db()
     .from("teams")
-    .select("id, team_name, logo_url, points, wins, losses, draws, maps_won, maps_lost")
-    .eq("status", "approved")
+    .select("id, team_name, logo_url, points, wins, losses, draws, maps_won, maps_lost, status")
+    .neq("status", "rejected")
     .order("points", { ascending: false })
     .order("wins", { ascending: false });
 

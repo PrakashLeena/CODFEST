@@ -25,6 +25,33 @@ export default function AdminPage() {
   const { data: session, status } = useSession();
   const [tab, setTab] = useState<(typeof TABS)[number]>("Registrations");
   const [alert, setAlert] = useState<string | null>(null);
+  const [exporting, setExporting] = useState(false);
+
+  const downloadExcel = async () => {
+    setExporting(true);
+    try {
+      const res = await fetch("/api/admin/export/registrations");
+      if (!res.ok) {
+        window.alert("Export failed. Please check server logs.");
+        return;
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      const cd = res.headers.get("Content-Disposition") ?? "";
+      const match = cd.match(/filename="([^"]+)"/);
+      a.download = match?.[1] ?? `CODFEST_Registrations_${new Date().toISOString().slice(0, 10)}.xlsx`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (e: any) {
+      window.alert("Export failed: " + (e?.message || "Network error"));
+    } finally {
+      setExporting(false);
+    }
+  };
 
   useEffect(() => {
     if (session?.user?.role === "admin") getSocket().emit("join:admin");
@@ -49,16 +76,35 @@ export default function AdminPage() {
 
   return (
     <div className="site-gutter mx-auto max-w-7xl py-10">
-      <div className="flex flex-wrap items-end justify-between gap-4 border-b border-night-700 pb-4">
+      <div className="flex flex-wrap items-center justify-between gap-4 border-b border-night-700 pb-4">
         <div>
           <h1 className="section-title">HQ Command</h1>
           <p className="mt-1 font-mono text-xs uppercase tracking-[0.1em] text-zinc-400">
             SYS.ADMIN // DEPT. STATUS: NOMINAL
           </p>
         </div>
-        <span className="border border-ember-400 bg-ember-600/10 px-3 py-1 font-mono text-xs text-ember-400">
-          CLEARANCE: ADMIN
-        </span>
+        <div className="flex flex-wrap items-center gap-3">
+          <button
+            onClick={downloadExcel}
+            disabled={exporting}
+            className="flex items-center gap-2 rounded-lg border border-emerald-500/60 bg-emerald-600/15 px-4 py-2 font-mono text-xs font-bold text-emerald-400 shadow-[0_0_15px_rgba(16,185,129,0.25)] hover:bg-emerald-600/25 transition-all disabled:opacity-50"
+            title="Download full Excel spreadsheet with all team and player registration data"
+          >
+            {exporting ? (
+              <>
+                <span className="h-3.5 w-3.5 rounded-full border-2 border-emerald-400 border-t-transparent animate-spin" />
+                Exporting Excel…
+              </>
+            ) : (
+              <>
+                📥 Export Registrations (Excel .xlsx)
+              </>
+            )}
+          </button>
+          <span className="border border-ember-400 bg-ember-600/10 px-3 py-2 font-mono text-xs text-ember-400">
+            CLEARANCE: ADMIN
+          </span>
+        </div>
       </div>
 
       {alert && (
@@ -78,11 +124,11 @@ export default function AdminPage() {
       </div>
 
       <div className="mt-6">
-        {tab === "Registrations"       && <RegistrationsPanel />}
+        {tab === "Registrations"       && <RegistrationsPanel onDownloadExcel={downloadExcel} exporting={exporting} />}
         {tab === "Fixtures"            && <FixturesPanel />}
         {tab === "Leaderboard Control" && <LeaderboardControlPanel />}
         {tab === "Announcements"       && <AnnouncementsPanel />}
-        {tab === "Teams Control"       && <TeamsControlPanel />}
+        {tab === "Teams Control"       && <TeamsControlPanel onDownloadExcel={downloadExcel} exporting={exporting} />}
         {tab === "Audit log"           && <AuditPanel />}
       </div>
     </div>
@@ -92,8 +138,10 @@ export default function AdminPage() {
 
 /* ------------------------------------------------------------------ */
 
-function RegistrationsPanel() {
+function RegistrationsPanel({ onDownloadExcel, exporting }: { onDownloadExcel?: () => void; exporting?: boolean }) {
   const [teams, setTeams] = useState<any[]>([]);
+  const [localDownloading, setLocalDownloading] = useState(false);
+
   const load = useCallback(() => {
     fetch("/api/admin/teams").then((r) => r.json()).then((j) => setTeams(j.teams ?? []));
   }, []);
@@ -104,11 +152,68 @@ function RegistrationsPanel() {
     load();
   }
 
+  async function downloadExcel() {
+    if (onDownloadExcel) {
+      onDownloadExcel();
+      return;
+    }
+    setLocalDownloading(true);
+    try {
+      const res = await fetch("/api/admin/export/registrations");
+      if (!res.ok) { alert("Export failed."); return; }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      const cd = res.headers.get("Content-Disposition") ?? "";
+      const match = cd.match(/filename="([^"]+)"/);
+      a.download = match?.[1] ?? `CODFEST_Registrations_${new Date().toISOString().slice(0, 10)}.xlsx`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } finally {
+      setLocalDownloading(false);
+    }
+  }
+
+  const isBusy = exporting || localDownloading;
   const pending = teams.filter((t) => t.status === "pending");
   const others = teams.filter((t) => t.status !== "pending");
 
   return (
     <div className="space-y-8">
+      {/* EXPORT BANNER / BUTTON */}
+      <div className="flex flex-wrap items-center justify-between gap-4 rounded-xl border border-emerald-500/30 bg-gradient-to-r from-emerald-950/30 via-night-850 to-emerald-950/30 p-4 shadow-lg">
+        <div>
+          <div className="flex items-center gap-2">
+            <span className="h-2.5 w-2.5 rounded-full bg-emerald-400 animate-pulse" />
+            <h3 className="font-display text-sm font-bold uppercase tracking-wider text-white">
+              Registration Database Export
+            </h3>
+          </div>
+          <p className="mt-0.5 font-mono text-xs text-zinc-400">
+            Total teams: <span className="font-bold text-white">{teams.length}</span> ({pending.length} pending, {teams.filter(t => t.status === "approved").length} approved)
+          </p>
+        </div>
+        <button
+          onClick={downloadExcel}
+          disabled={isBusy}
+          className="flex items-center gap-2 rounded-lg border border-emerald-500/60 bg-emerald-600/20 px-5 py-2.5 font-mono text-xs font-bold text-emerald-300 shadow-[0_0_20px_rgba(16,185,129,0.2)] hover:bg-emerald-600/30 hover:text-white transition-all disabled:opacity-50"
+        >
+          {isBusy ? (
+            <>
+              <span className="h-4 w-4 rounded-full border-2 border-emerald-300 border-t-transparent animate-spin" />
+              Generating Excel file…
+            </>
+          ) : (
+            <>
+              📊 Download All Registrations (.xlsx)
+            </>
+          )}
+        </button>
+      </div>
+
       <section>
         <h2 className="font-display text-lg font-bold uppercase text-white">
           Pending approval ({pending.length})
@@ -123,10 +228,10 @@ function RegistrationsPanel() {
               </div>
               <div className="mt-3 text-xs text-zinc-500">
                 Captain: <span className="text-zinc-300">{t.captain?.name}</span> ({t.captain?.email})<br />
-                Phone: {t.phone ?? "â€”"} Â· Discord: {t.discord || "â€”"}
+                Phone: {t.phone ?? "—"} · Discord: {t.discord || "—"}
               </div>
               <div className="mt-2 text-xs text-zinc-500">
-                Roster: {t.players?.map((p: any) => p.player_name).join(", ") || "â€”"}
+                Roster: {t.players?.map((p: any) => p.player_name).join(", ") || "—"}
               </div>
               <div className="mt-4 flex gap-2">
                 <button className="btn-primary flex-1 !py-2 text-xs" onClick={() => act(t.id, "approve")}>Approve</button>
@@ -318,6 +423,7 @@ function LeaderboardControlPanel() {
 
   const [saveBusy, setSaveBusy] = useState(false);
   const [saveMsg, setSaveMsg] = useState<{ type: "success" | "error"; text: string } | null>(null);
+  const [deleteBusy, setDeleteBusy] = useState(false);
 
   // Slide carousel state for clashes
   const [slideIndex, setSlideIndex] = useState(0);
@@ -570,6 +676,33 @@ function LeaderboardControlPanel() {
     }
   };
 
+  // Delete a clash score
+  const deleteClash = async (matchId: string) => {
+    if (!confirm("Delete this clash result? This will recalculate standings and cannot be undone.")) return;
+    setDeleteBusy(true);
+    setSaveMsg(null);
+    try {
+      const res = await fetch("/api/admin/clash", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ match_id: matchId }),
+      });
+      const json = await res.json();
+      if (!res.ok) {
+        setSaveMsg({ type: "error", text: json.error ?? "Failed to delete clash." });
+      } else {
+        setSaveMsg({ type: "success", text: "✓ Clash deleted and standings recalculated." });
+        // Reset slide index if needed
+        setSlideIndex(0);
+        loadData();
+      }
+    } catch (e: any) {
+      setSaveMsg({ type: "error", text: e.message || "Network error." });
+    } finally {
+      setDeleteBusy(false);
+    }
+  };
+
   // Save quick manual standings override
   const saveStandingsOverride = async (teamId: string) => {
     const edit = editingStandings[teamId];
@@ -760,19 +893,28 @@ function LeaderboardControlPanel() {
                         </div>
                       </div>
 
-                      <div className="mt-4 flex items-center justify-between border-t border-night-800 pt-3">
+                      <div className="mt-4 flex flex-wrap items-center justify-between gap-2 border-t border-night-800 pt-3">
                         <div className="font-mono text-xs text-zinc-400">
                           Winner:{" "}
                           <span className="font-bold text-amber-400">
                             {isWinner1 ? currentMatch.team1?.team_name : isWinner2 ? currentMatch.team2?.team_name : "Tied"}
                           </span>
                         </div>
-                        <button
-                          onClick={() => loadMatchIntoEditor(currentMatch)}
-                          className="rounded-lg border border-ember-500/40 bg-ember-600/10 px-3 py-1 font-mono text-xs font-bold text-ember-400 hover:bg-ember-600/20 transition-all"
-                        >
-                          ✎ Edit this Clash in Scoreboard Editor
-                        </button>
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => loadMatchIntoEditor(currentMatch)}
+                            className="rounded-lg border border-ember-500/40 bg-ember-600/10 px-3 py-1 font-mono text-xs font-bold text-ember-400 hover:bg-ember-600/20 transition-all"
+                          >
+                            ✎ Edit this Clash
+                          </button>
+                          <button
+                            onClick={() => deleteClash(currentMatch.id)}
+                            disabled={deleteBusy}
+                            className="rounded-lg border border-red-500/40 bg-red-600/10 px-3 py-1 font-mono text-xs font-bold text-red-400 hover:bg-red-600/20 transition-all disabled:opacity-40"
+                          >
+                            {deleteBusy ? "Deleting…" : "🗑 Delete"}
+                          </button>
+                        </div>
                       </div>
                     </div>
 
@@ -1530,7 +1672,7 @@ interface TeamFull {
   players?:   { id: string; player_name: string; game_id?: string; is_substitute?: boolean }[];
 }
 
-function TeamsControlPanel() {
+function TeamsControlPanel({ onDownloadExcel, exporting }: { onDownloadExcel?: () => void; exporting?: boolean }) {
   const [teams,      setTeams]      = useState<TeamFull[]>([]);
   const [loading,    setLoading]    = useState(true);
   const [search,     setSearch]     = useState("");
@@ -1569,7 +1711,7 @@ function TeamsControlPanel() {
     });
     setEditBusy(false);
     if (res.ok) {
-      setEditMsg("âœ“ Team name updated.");
+      setEditMsg("✓ Team name updated.");
       load();
       setTimeout(() => { setEditing(null); setEditMsg(null); }, 1500);
     } else {
@@ -1596,6 +1738,23 @@ function TeamsControlPanel() {
 
   return (
     <div className="space-y-6">
+      {/* Top Header with Excel Export */}
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-night-800 pb-3">
+        <div>
+          <h2 className="font-display text-base font-bold uppercase text-white">Teams Registry</h2>
+          <p className="font-mono text-xs text-zinc-400">Total registered teams: {teams.length}</p>
+        </div>
+        {onDownloadExcel && (
+          <button
+            onClick={onDownloadExcel}
+            disabled={exporting}
+            className="flex items-center gap-2 rounded-lg border border-emerald-500/50 bg-emerald-600/15 px-3.5 py-1.5 font-mono text-xs font-bold text-emerald-300 hover:bg-emerald-600/25 transition-all disabled:opacity-50"
+          >
+            {exporting ? "Exporting…" : "📥 Export Excel (.xlsx)"}
+          </button>
+        )}
+      </div>
+
       {/* Stats row */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         {(["all", "approved", "pending", "rejected"] as const).map((s) => (

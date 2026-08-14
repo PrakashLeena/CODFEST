@@ -27,6 +27,7 @@
     "socket.io": "^4.7.5",
     "socket.io-client": "^4.7.5",
     "tail": "^2.2.6",
+    "xlsx": "^0.18.5",
     "zod": "^3.23.8"
   },
   "devDependencies": {

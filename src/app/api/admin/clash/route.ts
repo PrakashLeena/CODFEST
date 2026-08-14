@@ -209,6 +209,51 @@ function isValidUuid(val?: string | null): boolean {
 }
 
 /**
+ * DELETE /api/admin/clash
+ * Deletes a clash match by ID and recalculates affected team standings.
+ */
+export async function DELETE(req: Request) {
+  const admin = await requireRole("admin");
+  if (!admin) return NextResponse.json({ error: "Admin only" }, { status: 403 });
+
+  const body = await req.json().catch(() => null);
+  const { match_id } = body ?? {};
+
+  if (!match_id || typeof match_id !== "string") {
+    return NextResponse.json({ error: "match_id required" }, { status: 400 });
+  }
+
+  // Fetch match before deleting to get team IDs for standings recalc
+  const { data: match, error: fetchErr } = await db()
+    .from("matches")
+    .select("id, team1_id, team2_id")
+    .eq("id", match_id)
+    .single();
+
+  if (fetchErr || !match) {
+    return NextResponse.json({ error: "Match not found" }, { status: 404 });
+  }
+
+  const { error: deleteErr } = await db().from("matches").delete().eq("id", match_id);
+  if (deleteErr) {
+    return NextResponse.json({ error: deleteErr.message }, { status: 500 });
+  }
+
+  // Recalculate standings for both teams
+  await recalcTeamStats([match.team1_id, match.team2_id]);
+
+  const leaderboard = await getLeaderboard();
+  emitEvent("leaderboard:updated", { leaderboard });
+
+  await logAudit(admin.id, "match.clash_deleted", match_id, {
+    team1_id: match.team1_id,
+    team2_id: match.team2_id,
+  });
+
+  return NextResponse.json({ ok: true, leaderboard });
+}
+
+/**
  * PATCH /api/admin/clash
  * Direct update of team standings stats (points, wins, losses, etc.)
  */
