@@ -32,32 +32,8 @@ function googleConfigured(): boolean {
   );
 }
 
-const PERSISTENT_MAX_AGE = 10 * 365 * 24 * 60 * 60; // 10 years — never expires until manual sign out
-
 export const authOptions: NextAuthOptions = {
-  session: {
-    strategy: "jwt",
-    maxAge: PERSISTENT_MAX_AGE,
-    updateAge: 24 * 60 * 60,
-  },
-  jwt: {
-    maxAge: PERSISTENT_MAX_AGE,
-  },
-  cookies: {
-    sessionToken: {
-      name:
-        process.env.NODE_ENV === "production"
-          ? "__Secure-next-auth.session-token"
-          : "next-auth.session-token",
-      options: {
-        httpOnly: true,
-        sameSite: "lax",
-        path: "/",
-        secure: process.env.NODE_ENV === "production",
-        maxAge: PERSISTENT_MAX_AGE,
-      },
-    },
-  },
+  session: { strategy: "jwt" },
   pages: { signIn: "/login" },
   providers: [
     // ── Google OAuth (admin sign-in) — only when credentials are configured ──

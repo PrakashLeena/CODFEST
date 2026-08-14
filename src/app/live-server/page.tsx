@@ -3,18 +3,17 @@
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 
-/**
- * The live server view has been moved into the Admin Panel
- * (Live Server tab). Redirect there automatically.
- */
+/** Redirect to the Leaderboard & Match Clash scoreboard page. */
 export default function LiveServerRedirect() {
   const router = useRouter();
-  useEffect(() => { router.replace("/admin"); }, [router]);
+  useEffect(() => {
+    router.replace("/leaderboard");
+  }, [router]);
 
   return (
     <main className="flex min-h-screen items-center justify-center bg-[#0a0c10]">
       <p className="font-mono text-xs text-gray-500 animate-pulse">
-        Redirecting to Admin Panel…
+        Redirecting to Leaderboard & Match Scoreboard…
       </p>
     </main>
   );
