@@ -111,7 +111,13 @@ export async function POST(req: Request) {
     submitted_by: admin.id,
   };
 
-  let targetMatchId = match_id;
+function isValidUuid(val?: string | null): boolean {
+  if (!val) return false;
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(val);
+}
+
+  const validAdminUuid = isValidUuid(admin.id) ? admin.id : null;
+  let targetMatchId = isValidUuid(match_id) ? match_id : null;
 
   if (targetMatchId) {
     // Update existing match
@@ -128,7 +134,7 @@ export async function POST(req: Request) {
         winner_id: winnerId,
         submission_team1: submission1,
         submission_team2: submission2,
-        resolved_by: admin.id,
+        resolved_by: validAdminUuid,
         resolved_at: new Date().toISOString(),
       })
       .eq("id", targetMatchId);
@@ -151,7 +157,7 @@ export async function POST(req: Request) {
         winner_id: winnerId,
         submission_team1: submission1,
         submission_team2: submission2,
-        resolved_by: admin.id,
+        resolved_by: validAdminUuid,
         resolved_at: new Date().toISOString(),
       })
       .select("id")

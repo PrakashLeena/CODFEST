@@ -106,6 +106,11 @@ export async function finalizeMatch(
   const winnerId =
     score1 > score2 ? match.team1_id : score2 > score1 ? match.team2_id : null;
 
+  const validResolvedBy =
+    resolvedBy && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(resolvedBy)
+      ? resolvedBy
+      : null;
+
   await db()
     .from("matches")
     .update({
@@ -113,7 +118,7 @@ export async function finalizeMatch(
       final_score1: score1,
       final_score2: score2,
       winner_id: winnerId,
-      resolved_by: resolvedBy ?? null,
+      resolved_by: validResolvedBy,
       resolved_at: resolvedBy ? new Date().toISOString() : null,
     })
     .eq("id", match.id);
