@@ -8,8 +8,11 @@ export const revalidate = 0;
 
 /**
  * GET /api/admin/export/registrations
- * Downloads all team registration details as an Excel (.xlsx) file.
- * Sheet 1: Teams summary | Sheet 2: All Players (flat)
+ * Downloads all team & member registration details as an Excel (.xlsx) file.
+ *
+ * Sheet 1 – "Team + Members"  : one row per team, member columns inlined (M1…M6)
+ * Sheet 2 – "All Members"     : flat list, one row per player
+ * Sheet 3 – "Team Rosters"    : grouped team-by-team readable view
  */
 export async function GET() {
   try {
@@ -18,10 +21,14 @@ export async function GET() {
       return NextResponse.json({ error: "Admin access required" }, { status: 403 });
     }
 
-    // 1. Fetch teams, players, and users
-    const [{ data: teams, error: tErr }, { data: players, error: pErr }, { data: users }] = await Promise.all([
+    // ── 1. Fetch all data ──────────────────────────────────────────────
+    const [
+      { data: teams, error: tErr },
+      { data: players, error: pErr },
+      { data: users, error: uErr },
+    ] = await Promise.all([
       db().from("teams").select("*").order("created_at", { ascending: false }),
-      db().from("players").select("*"),
+      db().from("players").select("*").order("is_substitute"),
       db().from("users").select("id, name, email"),
     ]);
 
@@ -29,196 +36,229 @@ export async function GET() {
       console.error("Teams query error:", tErr);
       return NextResponse.json({ error: tErr.message }, { status: 500 });
     }
+    if (pErr) {
+      console.error("Players query error:", pErr);
+      return NextResponse.json({ error: pErr.message }, { status: 500 });
+    }
+    if (uErr) {
+      console.error("Users query error (non-fatal):", uErr);
+      // non-fatal – continue without captain name enrichment
+    }
 
     const userMap = new Map((users ?? []).map((u: any) => [u.id, u]));
     const playersByTeam = new Map<string, any[]>();
 
     for (const p of players ?? []) {
       if (p.team_id) {
-        if (!playersByTeam.has(p.team_id)) {
-          playersByTeam.set(p.team_id, []);
-        }
+        if (!playersByTeam.has(p.team_id)) playersByTeam.set(p.team_id, []);
         playersByTeam.get(p.team_id)!.push(p);
       }
     }
 
-    // ──────────────────────────────────────────────
-    // SHEET 1: Teams Summary
-    // ──────────────────────────────────────────────
-    const teamsRows = (teams ?? []).map((t: any, i: number) => {
+    const fmtDate = (raw: string | null) => {
+      try {
+        return raw ? new Date(raw).toLocaleString("en-IN", { timeZone: "Asia/Kolkata" }) : "—";
+      } catch {
+        return String(raw ?? "—");
+      }
+    };
+
+    // ── SHEET 1: Team + Members (one row per team, members inlined) ────
+    //  Columns: #, Team Name, Status, Captain Name, Captain Email,
+    //           Phone, Discord, WhatsApp, Total Members, Registered On,
+    //           [repeated for up to MAX_MEMBERS] M# Name, M# IGN, M# Email, M# Phone, M# IM No., M# Role
+    const MAX_MEMBERS = 6;
+
+    const teamMemberRows = (teams ?? []).map((t: any, i: number) => {
       const captain = t.captain_id ? userMap.get(t.captain_id) : null;
       const teamPlayers = playersByTeam.get(t.id) ?? [];
 
-      let createdStr = "—";
-      try {
-        if (t.created_at) {
-          createdStr = new Date(t.created_at).toLocaleString("en-IN", { timeZone: "Asia/Kolkata" });
-        }
-      } catch {
-        createdStr = String(t.created_at ?? "—");
-      }
-
-      return {
+      const row: Record<string, string | number> = {
         "#": i + 1,
         "Team Name": t.team_name ?? "—",
-        Status: String(t.status ?? "pending").toUpperCase(),
+        "Status": String(t.status ?? "pending").toUpperCase(),
         "Captain Name": captain?.name ?? t.captain_name ?? "—",
         "Captain Email": captain?.email ?? t.email ?? "—",
-        "Contact Phone": t.phone ?? "—",
-        Discord: t.discord ?? "—",
-        WhatsApp: t.whatsapp ?? "—",
+        "Phone": t.phone ?? "—",
+        "Discord": t.discord ?? "—",
+        "WhatsApp": t.whatsapp ?? "—",
         "Total Members": teamPlayers.length,
-        Points: Number(t.points) || 0,
-        Wins: Number(t.wins) || 0,
-        Losses: Number(t.losses) || 0,
-        Draws: Number(t.draws) || 0,
-        "Score / Maps Won": Number(t.maps_won) || 0,
-        "Opp Score / Maps Lost": Number(t.maps_lost) || 0,
-        "Registered On": createdStr,
+        "Registered On": fmtDate(t.created_at),
       };
+
+      // Inline member columns M1…M6
+      for (let m = 0; m < MAX_MEMBERS; m++) {
+        const p = teamPlayers[m];
+        const prefix = `M${m + 1}`;
+        if (p) {
+          row[`${prefix} Name`]   = p.player_name ?? "—";
+          row[`${prefix} IGN`]    = p.game_id ?? "—";
+          row[`${prefix} Email`]  = p.email ?? "—";
+          row[`${prefix} Phone`]  = p.phone ?? "—";
+          row[`${prefix} IM No.`] = p.im_number ?? "—";
+          row[`${prefix} Role`]   = p.is_substitute ? "Substitute" : "Main";
+        } else {
+          row[`${prefix} Name`]   = "";
+          row[`${prefix} IGN`]    = "";
+          row[`${prefix} Email`]  = "";
+          row[`${prefix} Phone`]  = "";
+          row[`${prefix} IM No.`] = "";
+          row[`${prefix} Role`]   = "";
+        }
+      }
+
+      return row;
     });
 
-    // ──────────────────────────────────────────────
-    // SHEET 2: All Players (flat list)
-    // ──────────────────────────────────────────────
-    const playerRows: Record<string, string | number>[] = [];
-    let playerIndex = 1;
+    // ── SHEET 2: All Members – flat list ──────────────────────────────
+    const memberRows: Record<string, string | number>[] = [];
+    let mIdx = 1;
 
     for (const t of teams ?? []) {
       const teamPlayers = playersByTeam.get(t.id) ?? [];
       for (const p of teamPlayers) {
-        playerRows.push({
-          "#": playerIndex++,
+        memberRows.push({
+          "#": mIdx++,
           "Team Name": t.team_name ?? "—",
           "Team Status": String(t.status ?? "pending").toUpperCase(),
-          "Player / Member Name": p.player_name ?? "—",
+          "Member Name": p.player_name ?? "—",
           "In-Game ID (IGN)": p.game_id ?? "—",
-          "Player Email": p.email ?? "—",
-          "Player Phone": p.phone ?? "—",
+          "Email": p.email ?? "—",
+          "Phone": p.phone ?? "—",
           "IM Number": p.im_number ?? "—",
-          Role: p.is_substitute ? "Substitute" : "Main Roster",
+          "Role": p.is_substitute ? "Substitute" : "Main Roster",
         });
       }
     }
 
-    // ──────────────────────────────────────────────
-    // SHEET 3: Team-by-Team Rosters
-    // ──────────────────────────────────────────────
+    // ── SHEET 3: Team Rosters – grouped readable view ─────────────────
     const rosterRows: Record<string, string>[] = [];
+
     for (const t of teams ?? []) {
       const captain = t.captain_id ? userMap.get(t.captain_id) : null;
       const teamPlayers = playersByTeam.get(t.id) ?? [];
 
+      // Team header row
       rosterRows.push({
-        Team: `TEAM: ${String(t.team_name).toUpperCase()}`,
-        Status: `[ ${String(t.status).toUpperCase()} ]`,
-        "Captain / Contact": captain?.name ? `${captain.name} (${captain.email})` : (t.email || "—"),
-        Phone: t.phone || "—",
+        "Team": `▶  ${String(t.team_name).toUpperCase()}`,
+        "Status": String(t.status ?? "pending").toUpperCase(),
+        "Captain": captain?.name ? `${captain.name} (${captain.email})` : t.email || "—",
+        "Phone": t.phone || "—",
+        "Discord": t.discord || "—",
+        "#": "",
         "Member Name": "",
-        "In-Game ID": "",
+        "IGN": "",
         "Member Email": "",
         "Member Phone": "",
-        Role: "",
+        "IM Number": "",
+        "Role": "",
       });
 
       if (teamPlayers.length === 0) {
         rosterRows.push({
-          Team: "",
-          Status: "",
-          "Captain / Contact": "",
-          Phone: "",
-          "Member Name": "No players registered yet",
-          "In-Game ID": "",
-          "Member Email": "",
-          "Member Phone": "",
-          Role: "",
+          "Team": "", "Status": "", "Captain": "", "Phone": "", "Discord": "",
+          "#": "", "Member Name": "— no players registered yet —",
+          "IGN": "", "Member Email": "", "Member Phone": "", "IM Number": "", "Role": "",
         });
       } else {
         teamPlayers.forEach((p, pIdx) => {
           rosterRows.push({
-            Team: "",
-            Status: "",
-            "Captain / Contact": "",
-            Phone: "",
-            "Member Name": `${pIdx + 1}. ${p.player_name}`,
-            "In-Game ID": p.game_id || "—",
+            "Team": "", "Status": "", "Captain": "", "Phone": "", "Discord": "",
+            "#": String(pIdx + 1),
+            "Member Name": p.player_name ?? "—",
+            "IGN": p.game_id || "—",
             "Member Email": p.email || "—",
             "Member Phone": p.phone || "—",
-            Role: p.is_substitute ? "Substitute" : "Main Roster",
+            "IM Number": p.im_number || "—",
+            "Role": p.is_substitute ? "Substitute" : "Main Roster",
           });
         });
       }
 
+      // Blank spacer row
       rosterRows.push({
-        Team: "",
-        Status: "",
-        "Captain / Contact": "",
-        Phone: "",
-        "Member Name": "",
-        "In-Game ID": "",
-        "Member Email": "",
-        "Member Phone": "",
-        Role: "",
+        "Team": "", "Status": "", "Captain": "", "Phone": "", "Discord": "",
+        "#": "", "Member Name": "", "IGN": "", "Member Email": "",
+        "Member Phone": "", "IM Number": "", "Role": "",
       });
     }
 
-    // ──────────────────────────────────────────────
-    // Build Workbook
-    // ──────────────────────────────────────────────
+    // ── Build Workbook ─────────────────────────────────────────────────
     const wb = XLSX.utils.book_new();
 
-    const wsTeams = XLSX.utils.json_to_sheet(
-      teamsRows.length ? teamsRows : [{ "#": 1, "Team Name": "No teams registered yet" }]
+    // Sheet 1 – Team + Members
+    const wsTeamMembers = XLSX.utils.json_to_sheet(
+      teamMemberRows.length
+        ? teamMemberRows
+        : [{ "#": 1, "Team Name": "No teams registered yet" }]
     );
-    wsTeams["!cols"] = [
+    const baseCols = [
       { wch: 4 },  // #
-      { wch: 28 }, // Team Name
+      { wch: 26 }, // Team Name
       { wch: 12 }, // Status
       { wch: 24 }, // Captain Name
-      { wch: 32 }, // Captain Email
+      { wch: 30 }, // Captain Email
       { wch: 16 }, // Phone
       { wch: 18 }, // Discord
       { wch: 16 }, // WhatsApp
       { wch: 14 }, // Total Members
-      { wch: 8 },  // Points
-      { wch: 6 },  // Wins
-      { wch: 8 },  // Losses
-      { wch: 6 },  // Draws
-      { wch: 20 }, // Score / Maps Won
-      { wch: 22 }, // Opp Score / Maps Lost
-      { wch: 24 }, // Registered On
+      { wch: 22 }, // Registered On
     ];
-    XLSX.utils.book_append_sheet(wb, wsTeams, "Teams Summary");
+    const memberCols = Array.from({ length: MAX_MEMBERS }, () => [
+      { wch: 24 }, // Name
+      { wch: 20 }, // IGN
+      { wch: 28 }, // Email
+      { wch: 16 }, // Phone
+      { wch: 16 }, // IM No.
+      { wch: 12 }, // Role
+    ]).flat();
+    wsTeamMembers["!cols"] = [...baseCols, ...memberCols];
+    XLSX.utils.book_append_sheet(wb, wsTeamMembers, "Team + Members");
 
-    const wsPlayers = XLSX.utils.json_to_sheet(
-      playerRows.length ? playerRows : [{ "#": 1, "Team Name": "No players registered yet" }]
+    // Sheet 2 – All Members
+    const wsMembers = XLSX.utils.json_to_sheet(
+      memberRows.length
+        ? memberRows
+        : [{ "#": 1, "Team Name": "No members registered yet" }]
     );
-    wsPlayers["!cols"] = [
+    wsMembers["!cols"] = [
       { wch: 4 },  // #
-      { wch: 28 }, // Team Name
+      { wch: 26 }, // Team Name
       { wch: 14 }, // Team Status
-      { wch: 28 }, // Player Name
-      { wch: 24 }, // In-Game ID
-      { wch: 30 }, // Player Email
-      { wch: 18 }, // Player Phone
+      { wch: 26 }, // Member Name
+      { wch: 22 }, // IGN
+      { wch: 30 }, // Email
+      { wch: 16 }, // Phone
       { wch: 16 }, // IM Number
-      { wch: 16 }, // Role
+      { wch: 14 }, // Role
     ];
-    XLSX.utils.book_append_sheet(wb, wsPlayers, "All Players");
+    XLSX.utils.book_append_sheet(wb, wsMembers, "All Members");
 
+    // Sheet 3 – Team Rosters
     const wsRosters = XLSX.utils.json_to_sheet(rosterRows);
     wsRosters["!cols"] = [
-      { wch: 32 }, { wch: 16 }, { wch: 36 }, { wch: 16 }, { wch: 28 }, { wch: 22 }, { wch: 30 }, { wch: 18 }, { wch: 16 }
+      { wch: 30 }, // Team
+      { wch: 12 }, // Status
+      { wch: 34 }, // Captain
+      { wch: 16 }, // Phone
+      { wch: 18 }, // Discord
+      { wch: 4 },  // #
+      { wch: 26 }, // Member Name
+      { wch: 20 }, // IGN
+      { wch: 28 }, // Member Email
+      { wch: 16 }, // Member Phone
+      { wch: 16 }, // IM Number
+      { wch: 14 }, // Role
     ];
     XLSX.utils.book_append_sheet(wb, wsRosters, "Team Rosters");
 
-    // Output binary buffer as Uint8Array (compatible with all Response environments)
+    // ── Serialize & return ─────────────────────────────────────────────
     const arrayBuffer = XLSX.write(wb, { type: "array", bookType: "xlsx" });
     const uint8 = new Uint8Array(arrayBuffer);
 
     const now = new Date();
     const dateStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
-    const filename = `CODFEST_Registrations_${dateStr}.xlsx`;
+    const filename = `CODFEST_Teams_and_Members_${dateStr}.xlsx`;
 
     return new Response(uint8, {
       status: 200,
