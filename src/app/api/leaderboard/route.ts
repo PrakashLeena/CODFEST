@@ -1,8 +1,12 @@
 import { NextResponse } from "next/server";
-import { getLeaderboard } from "@/lib/standings";
+import { getLeaderboard, getLeaderboardImages } from "@/lib/standings";
 
 export const dynamic = "force-dynamic";
 
 export async function GET() {
-  return NextResponse.json({ leaderboard: await getLeaderboard() });
+  const [leaderboard, images] = await Promise.all([
+    getLeaderboard(),
+    getLeaderboardImages(),
+  ]);
+  return NextResponse.json({ leaderboard, images });
 }

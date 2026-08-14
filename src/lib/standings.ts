@@ -80,3 +80,18 @@ export async function getMatchWithTeams(id: string): Promise<Match | null> {
   const { data } = await db().from("matches").select(MATCH_SELECT).eq("id", id).single();
   return data as Match | null;
 }
+
+export async function getLeaderboardImages() {
+  try {
+    const { data, error } = await db()
+      .from("leaderboard_images")
+      .select("id, title, image_url, created_at")
+      .order("created_at", { ascending: false });
+    if (error) return [];
+    return data ?? [];
+  } catch {
+    return [];
+  }
+}
+
+

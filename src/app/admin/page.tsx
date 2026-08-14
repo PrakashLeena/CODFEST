@@ -9,13 +9,11 @@ import StatusBadge from "@/components/StatusBadge";
 import TeamMark from "@/components/TeamMark";
 import { getSocket, useSocketEvents } from "@/hooks/useSocket";
 import { ROUND_NAMES, type Match } from "@/lib/types";
-import { getPusherClient } from "@/lib/pusher";
 
 const TABS = [
   "Registrations",
   "Fixtures",
-  "Live Server",
-  "Disputes",
+  "Leaderboard",
   "Announcements",
   "Audit log",
   "Teams Control",
@@ -30,15 +28,11 @@ export default function AdminPage() {
     if (session?.user?.role === "admin") getSocket().emit("join:admin");
   }, [session]);
 
-  useSocketEvents(["admin:dispute_alert", "team:registered"], (event) => {
-    setAlert(
-      event === "admin:dispute_alert"
-        ? "A match was just disputed â€” check the Disputes tab."
-        : "A new team just registered â€” check Registrations."
-    );
+  useSocketEvents(["team:registered"], () => {
+    setAlert("A new team just registered — check Registrations.");
   });
 
-  if (status === "loading") return <p className="mt-20 text-center text-zinc-500">Loadingâ€¦</p>;
+  if (status === "loading") return <p className="mt-20 text-center text-zinc-500">Loading…</p>;
   if (session?.user?.role !== "admin") {
     return (
       <div className="site-gutter mx-auto max-w-md py-20 text-center">
@@ -82,8 +76,7 @@ export default function AdminPage() {
       <div className="mt-6">
         {tab === "Registrations" && <RegistrationsPanel />}
         {tab === "Fixtures"      && <FixturesPanel />}
-        {tab === "Live Server"   && <LiveServerPanel />}
-        {tab === "Disputes"      && <DisputesPanel />}
+        {tab === "Leaderboard"   && <LeaderboardPanel />}
         {tab === "Announcements" && <AnnouncementsPanel />}
         {tab === "Audit log"     && <AuditPanel />}
         {tab === "Teams Control" && <TeamsControlPanel />}
@@ -236,443 +229,165 @@ function FixturesPanel() {
   );
 }
 /* ================================================================== */
-/*  LIVE SERVER - All-in-one: RCON + Bracket Score Push + Scoreboard + Killfeed */
+/*  LEADERBOARD IMAGE PANEL                                            */
 /* ================================================================== */
 
-interface RconPlayer {
-  slot:   number;
-  name:   string;
-  score:  number;
-  ping:   number;
-  team:   string;
-  kills:  number;
-  deaths: number;
-}
-interface ServerInfo {
-  online:        boolean;
-  map?:          string;
-  allies_score?: number;
-  axis_score?:   number;
-  players?:      RconPlayer[];
-  error?:        string;
-}
-interface KillEvent      { attacker: string; victim: string; weapon: string; time: string; }
-interface PlayerRow      { name: string; kills: number; deaths: number; team: "allies" | "axis" | "free"; kd: string | number; }
-interface ScoreUpdate    { scoreboard: PlayerRow[]; map: string; status: string; time: string; }
-interface MatchStatusEvt { status: "starting" | "live" | "ended"; map: string; scoreboard?: PlayerRow[]; time: string; }
-
-const STATUS_LABEL: Record<string, string> = { idle: "WAITING", starting: "STARTING", live: "LIVE", ended: "GAME OVER" };
-const STATUS_COLOR: Record<string, string> = {
-  idle:     "text-gray-400 border-gray-600 bg-gray-800/50",
-  starting: "text-yellow-400 border-yellow-500/40 bg-yellow-900/20",
-  live:     "text-green-400 border-green-500/40 bg-green-900/20",
-  ended:    "text-red-400 border-red-500/40 bg-red-900/20",
-};
-const TEAM_COLOR: Record<string, string> = { allies: "text-blue-400", axis: "text-red-400", free: "text-amber-400" };
-
-function isTDM(sb: PlayerRow[]) {
-  return new Set(sb.map((p) => p.team).filter((t) => t !== "free")).size >= 2;
+interface LeaderboardImage {
+  id: string;
+  title: string | null;
+  image_url: string;
+  created_at: string;
 }
 
-function LiveServerPanel() {
-  /* RCON polling */
-  const [info, setInfo] = useState<ServerInfo | null>(null);
-  useEffect(() => {
-    const poll = async () => {
-      try {
-        const r = await fetch(`/api/rcon?t=${Date.now()}`, { cache: "no-store" });
-        if (r.ok) setInfo(await r.json());
-      } catch { /* silent */ }
-    };
-    poll();
-    const iv = setInterval(poll, 2500);
-    return () => clearInterval(iv);
-  }, []);
-  const rconAllies = info?.players?.filter((p) => p.team === "allies") ?? [];
-  const rconAxis   = info?.players?.filter((p) => p.team === "axis")   ?? [];
+function LeaderboardPanel() {
+  const [images, setImages]   = useState<LeaderboardImage[]>([]);
+  const [title, setTitle]     = useState("");
+  const [file, setFile]       = useState<File | null>(null);
+  const [preview, setPreview] = useState<string | null>(null);
+  const [busy, setBusy]       = useState(false);
+  const [msg, setMsg]         = useState<string | null>(null);
+  const [error, setError]     = useState<string | null>(null);
+  const fileRef               = useRef<HTMLInputElement>(null);
 
-  /* Bracket score push */
-  const [liveMatches, setLiveMatches] = useState<Match[]>([]);
-  const [scores,      setScores]      = useState<Record<string, { s1: string; s2: string }>>({});
-  const [pushBusy,    setPushBusy]    = useState<Record<string, boolean>>({});
-  const [pushFb,      setPushFb]      = useState<Record<string, string>>({});
-  const loadMatches = useCallback(() => {
-    fetch("/api/matches?status=live").then((r) => r.json()).then((j) => {
-      const ms: Match[] = j.matches ?? [];
-      setLiveMatches(ms);
-      setScores((prev) => {
-        const next = { ...prev };
-        ms.forEach((m: any) => {
-          if (!next[m.id]) next[m.id] = { s1: m.live_score1 != null ? String(m.live_score1) : "", s2: m.live_score2 != null ? String(m.live_score2) : "" };
-        });
-        return next;
-      });
-    });
-  }, []);
-  useEffect(loadMatches, [loadMatches]);
-  useSocketEvents(["match:live", "match:finished"], () => loadMatches());
-
-  async function pushScore(matchId: string) {
-    const s = scores[matchId]; if (!s) return;
-    const score1 = parseInt(s.s1, 10), score2 = parseInt(s.s2, 10);
-    if (isNaN(score1) || isNaN(score2) || score1 < 0 || score2 < 0) {
-      setPushFb((p) => ({ ...p, [matchId]: "Enter valid non-negative scores." })); return;
-    }
-    setPushBusy((p) => ({ ...p, [matchId]: true }));
-    const res  = await fetch(`/api/matches/${matchId}/live-score`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ score1, score2 }) });
-    const json = await res.json();
-    setPushBusy((p) => ({ ...p, [matchId]: false }));
-    setPushFb((p)   => ({ ...p, [matchId]: res.ok ? `Pushed ${score1}-${score2}!` : json.error ?? "Failed" }));
-  }
-
-  /* Pusher real-time scoreboard + killfeed */
-  const [scoreboard,  setScoreboard]  = useState<PlayerRow[]>([]);
-  const [killFeed,    setKillFeed]    = useState<KillEvent[]>([]);
-  const [matchStatus, setMatchStatus] = useState<"idle"|"starting"|"live"|"ended">("idle");
-  const [mapName,     setMapName]     = useState("--");
-  const [lastUpdate,  setLastUpdate]  = useState("");
-  const [connected,   setConnected]   = useState(false);
-  const feedRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    const pusher  = getPusherClient();
-    const channel = pusher.subscribe("cod4-server");
-    pusher.connection.bind("connected",    () => setConnected(true));
-    pusher.connection.bind("disconnected", () => setConnected(false));
-    pusher.connection.bind("error",        () => setConnected(false));
-    channel.bind("score-update",  (d: ScoreUpdate)    => { setScoreboard(d.scoreboard ?? []); setMapName(d.map ?? "--"); setMatchStatus((d.status as any) ?? "live"); setLastUpdate(d.time ?? ""); });
-    channel.bind("kill-event",    (d: KillEvent)      => setKillFeed((prev) => [d, ...prev.slice(0, 29)]));
-    channel.bind("match-status",  (d: MatchStatusEvt) => { setMatchStatus(d.status); setMapName(d.map ?? "--"); if (d.scoreboard) setScoreboard(d.scoreboard); if (d.status === "starting") { setScoreboard([]); setKillFeed([]); } });
-    setTimeout(() => { if (pusher.connection.state === "connected") setConnected(true); }, 1000);
-    return () => { pusher.unsubscribe("cod4-server"); };
-  }, []);
-
-  useEffect(() => { if (feedRef.current) feedRef.current.scrollTop = 0; }, [killFeed]);
-
-  const tdm         = isTDM(scoreboard);
-  const sbAllies    = scoreboard.filter((p) => p.team === "allies");
-  const sbAxis      = scoreboard.filter((p) => p.team === "axis");
-  const alliesKills = sbAllies.reduce((s, p) => s + p.kills, 0);
-  const axisKills   = sbAxis.reduce((s, p)   => s + p.kills, 0);
-
-  return (
-    <div className="space-y-6">
-      {/* STATUS BAR */}
-      <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-gray-800 bg-gray-900/80 px-6 py-4">
-        <div className="flex items-center gap-4">
-          <div>
-            <p className="font-mono text-[10px] uppercase tracking-widest text-gray-500">RCON Server</p>
-            {info?.online
-              ? <p className="font-mono text-sm font-bold text-white">MAP: <span className="text-amber-400">{info.map}</span></p>
-              : <p className="font-mono text-sm font-bold text-red-500">Offline / Unreachable</p>}
-          </div>
-          {info?.online && (
-            <div className="flex items-center gap-3 rounded-lg border border-gray-700 bg-gray-800/60 px-4 py-2">
-              <span className="font-black text-3xl text-blue-400">{info.allies_score}</span>
-              <span className="font-bold text-gray-600">:</span>
-              <span className="font-black text-3xl text-red-400">{info.axis_score}</span>
-            </div>
-          )}
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          {tdm && (
-            <div className="flex items-center gap-3 rounded-lg border border-gray-700 bg-gray-800/60 px-4 py-2">
-              <span className="font-mono text-xs text-blue-400 font-bold">Allies {alliesKills}K</span>
-              <span className="text-gray-600 text-xs">vs</span>
-              <span className="font-mono text-xs text-red-400 font-bold">Axis {axisKills}K</span>
-            </div>
-          )}
-          <span className={`flex items-center gap-1.5 rounded-full border px-3 py-1.5 font-mono text-xs font-bold tracking-widest transition-all ${STATUS_COLOR[matchStatus]}`}>
-            {matchStatus === "live"     && <span className="h-2 w-2 animate-pulse rounded-full bg-green-500" />}
-            {matchStatus === "starting" && <span className="h-2 w-2 animate-bounce rounded-full bg-yellow-400" />}
-            {STATUS_LABEL[matchStatus] ?? "UNKNOWN"}
-          </span>
-          <span className={`flex items-center gap-1.5 rounded-full border px-3 py-1.5 font-mono text-xs transition-colors ${connected ? "border-emerald-500/30 bg-emerald-900/20 text-emerald-400" : "border-gray-700 bg-gray-800/50 text-gray-500"}`}>
-            <span className={`h-1.5 w-1.5 rounded-full ${connected ? "bg-emerald-400 animate-pulse" : "bg-gray-600"}`} />
-            {connected ? "PUSHER OK" : "CONNECTING..."}
-          </span>
-          {lastUpdate && <span className="font-mono text-[10px] text-gray-600">Updated {lastUpdate}</span>}
-        </div>
-      </div>
-
-      {/* MAIN GRID: RCON Allies | RCON Axis | Pusher Scoreboard | Kill Feed */}
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-12">
-        {/* RCON Allies */}
-        <div className="lg:col-span-3">
-          <div className="h-full rounded-xl border border-blue-900/40 bg-gray-900 overflow-hidden shadow-xl">
-            <div className="bg-blue-900/20 border-b border-blue-900/40 px-4 py-3">
-              <h3 className="font-mono text-xs font-bold uppercase tracking-widest text-blue-400">Allies - RCON</h3>
-            </div>
-            <div className="grid grid-cols-12 px-3 py-2 bg-gray-800/40 font-mono text-[9px] font-bold uppercase tracking-widest text-gray-500">
-              <span className="col-span-5">Player</span><span className="col-span-2 text-center">K</span><span className="col-span-2 text-center">D</span><span className="col-span-3 text-right">Ping</span>
-            </div>
-            <div className="divide-y divide-gray-800/50">
-              {!info?.online ? <p className="p-6 text-center text-xs text-gray-600 italic">Server offline</p>
-                : rconAllies.length === 0 ? <p className="p-6 text-center text-xs text-gray-600 italic">No players</p>
-                : rconAllies.map((p) => (
-                  <div key={p.slot} className="grid grid-cols-12 px-3 py-2.5 items-center hover:bg-gray-800/30">
-                    <div className="col-span-5 font-bold truncate text-xs text-white">{p.name}</div>
-                    <div className="col-span-2 text-center text-green-400 text-xs">{p.kills}</div>
-                    <div className="col-span-2 text-center text-red-400 text-xs">{p.deaths}</div>
-                    <div className="col-span-3 text-right text-gray-500 text-xs">{p.ping}ms</div>
-                  </div>
-                ))
-              }
-            </div>
-          </div>
-        </div>
-
-        {/* RCON Axis */}
-        <div className="lg:col-span-3">
-          <div className="h-full rounded-xl border border-red-900/40 bg-gray-900 overflow-hidden shadow-xl">
-            <div className="bg-red-900/20 border-b border-red-900/40 px-4 py-3">
-              <h3 className="font-mono text-xs font-bold uppercase tracking-widest text-red-400">Axis - RCON</h3>
-            </div>
-            <div className="grid grid-cols-12 px-3 py-2 bg-gray-800/40 font-mono text-[9px] font-bold uppercase tracking-widest text-gray-500">
-              <span className="col-span-5">Player</span><span className="col-span-2 text-center">K</span><span className="col-span-2 text-center">D</span><span className="col-span-3 text-right">Ping</span>
-            </div>
-            <div className="divide-y divide-gray-800/50">
-              {!info?.online ? <p className="p-6 text-center text-xs text-gray-600 italic">Server offline</p>
-                : rconAxis.length === 0 ? <p className="p-6 text-center text-xs text-gray-600 italic">No players</p>
-                : rconAxis.map((p) => (
-                  <div key={p.slot} className="grid grid-cols-12 px-3 py-2.5 items-center hover:bg-gray-800/30">
-                    <div className="col-span-5 font-bold truncate text-xs text-white">{p.name}</div>
-                    <div className="col-span-2 text-center text-green-400 text-xs">{p.kills}</div>
-                    <div className="col-span-2 text-center text-red-400 text-xs">{p.deaths}</div>
-                    <div className="col-span-3 text-right text-gray-500 text-xs">{p.ping}ms</div>
-                  </div>
-                ))
-              }
-            </div>
-          </div>
-        </div>
-
-        {/* Pusher Scoreboard */}
-        <div className="lg:col-span-4">
-          <div className="h-full rounded-xl border border-gray-800 bg-gray-900/80 overflow-hidden shadow-2xl">
-            <div className="flex items-center justify-between border-b border-gray-800 bg-gray-800/60 px-4 py-3">
-              <h3 className="font-mono text-[10px] font-bold uppercase tracking-widest text-gray-400">Live Scoreboard</h3>
-              <span className="font-mono text-[9px] text-gray-600">MAP: {mapName}</span>
-            </div>
-            <div className="grid grid-cols-12 border-b border-gray-800/60 bg-gray-800/30 px-3 py-2 font-mono text-[9px] font-bold uppercase tracking-widest text-gray-600">
-              <span className="col-span-1">#</span><span className="col-span-5">Player</span><span className="col-span-2 text-center">K</span><span className="col-span-2 text-center">D</span><span className="col-span-2 text-center">K/D</span>
-            </div>
-            <div className="divide-y divide-gray-800/40 overflow-y-auto max-h-96">
-              {scoreboard.length === 0
-                ? <p className="py-12 text-center font-mono text-xs text-gray-600">Waiting for Pusher data...</p>
-                : scoreboard.map((pl, idx) => (
-                  <div key={pl.name} className={`grid grid-cols-12 items-center px-3 py-2.5 hover:bg-gray-800/30 ${idx === 0 ? "bg-amber-500/5" : ""}`}>
-                    <div className="col-span-1 text-center font-mono text-xs text-gray-600">{idx + 1}</div>
-                    <div className="col-span-5 flex items-center gap-1.5 min-w-0">
-                      <div className={`h-1.5 w-1.5 flex-shrink-0 rounded-full ${pl.team === "allies" ? "bg-blue-500" : pl.team === "axis" ? "bg-red-500" : "bg-amber-500"}`} />
-                      <span className={`truncate font-mono text-xs font-bold ${TEAM_COLOR[pl.team] ?? "text-white"}`}>{pl.name}</span>
-                    </div>
-                    <div className="col-span-2 text-center font-mono text-xs font-bold text-green-400">{pl.kills}</div>
-                    <div className="col-span-2 text-center font-mono text-xs text-red-400">{pl.deaths}</div>
-                    <div className={`col-span-2 text-center font-mono text-xs font-bold ${Number(pl.kd) >= 2 ? "text-amber-400" : Number(pl.kd) >= 1 ? "text-gray-300" : "text-gray-600"}`}>{pl.kd}</div>
-                  </div>
-                ))
-              }
-            </div>
-          </div>
-        </div>
-
-        {/* Kill Feed */}
-        <div className="lg:col-span-2">
-          <div className="h-full rounded-xl border border-gray-800 bg-gray-900/80 overflow-hidden shadow-2xl flex flex-col">
-            <div className="border-b border-gray-800 bg-gray-800/60 px-4 py-3">
-              <h3 className="font-mono text-[10px] font-bold uppercase tracking-widest text-gray-400">Kill Feed</h3>
-            </div>
-            <div ref={feedRef} className="flex-1 overflow-y-auto divide-y divide-gray-800/40 max-h-96">
-              {killFeed.length === 0
-                ? <p className="py-10 text-center font-mono text-[10px] text-gray-600">No kills yet</p>
-                : killFeed.map((ev, idx) => (
-                  <div key={idx} className={`px-3 py-2.5 ${idx === 0 ? "bg-red-500/5 border-l-2 border-red-500" : "hover:bg-gray-800/20"}`}>
-                    <div className="flex items-center gap-1 font-mono text-[10px]">
-                      <span className="font-bold text-green-400 truncate">{ev.attacker}</span>
-                      <span className="text-red-500 flex-shrink-0">x</span>
-                      <span className="font-bold text-red-400 truncate">{ev.victim}</span>
-                    </div>
-                    <div className="mt-0.5 flex items-center justify-between">
-                      <span className="font-mono text-[9px] text-gray-600">{ev.weapon}</span>
-                      <span className="font-mono text-[8px] text-gray-700">{ev.time}</span>
-                    </div>
-                  </div>
-                ))
-              }
-            </div>
-            {killFeed.length > 0 && (
-              <div className="border-t border-gray-800 px-3 py-1.5 bg-gray-900/60">
-                <span className="font-mono text-[9px] text-gray-600">{killFeed.length} kills logged</span>
-              </div>
-            )}
-          </div>
-        </div>
-      </div>
-
-      {/* BRACKET SCORE PUSH */}
-      <div>
-        <div className="mb-3 flex flex-wrap items-center gap-3">
-          <h2 className="font-display text-sm font-bold uppercase tracking-wide text-white">Bracket Score Push</h2>
-          <span className="font-mono text-[10px] text-ember-300 border border-ember-400/30 bg-ember-600/10 px-2 py-1">
-            Type score then Push to broadcast instantly
-          </span>
-        </div>
-        {liveMatches.length === 0
-          ? <p className="py-5 text-center text-sm text-zinc-500">No live bracket matches. Start one in the <strong>Fixtures</strong> tab.</p>
-          : (
-            <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-              {liveMatches.map((m) => {
-                const busy = pushBusy[m.id] ?? false;
-                const fb   = pushFb[m.id];
-                const s    = scores[m.id] ?? { s1: "", s2: "" };
-                return (
-                  <div key={m.id} className="card p-4">
-                    <div className="flex items-center justify-between mb-3">
-                      <div>
-                        <p className="font-mono text-[9px] uppercase tracking-widest text-zinc-500">{ROUND_NAMES[m.round] ?? `Round ${m.round}`}</p>
-                        <p className="font-display font-bold text-sm text-white">
-                          {m.team1?.team_name ?? "TBD"} <span className="text-zinc-600">vs</span> {m.team2?.team_name ?? "TBD"}
-                        </p>
-                      </div>
-                      <span className="animate-pulse rounded bg-green-500/20 px-2 py-0.5 font-mono text-[9px] font-bold uppercase text-green-400">LIVE</span>
-                    </div>
-                    <div className="flex items-end gap-3">
-                      <div>
-                        <label className="label text-[10px]">{m.team1?.team_name ?? "T1"}</label>
-                        <input type="number" min={0} className="input !w-20 text-center text-lg font-bold" value={s.s1}
-                          onChange={(e) => setScores((p) => ({ ...p, [m.id]: { ...p[m.id], s1: e.target.value } }))}
-                          placeholder="0" onKeyDown={(e) => e.key === "Enter" && pushScore(m.id)} />
-                      </div>
-                      <span className="mb-2 font-bold text-zinc-600">-</span>
-                      <div>
-                        <label className="label text-[10px]">{m.team2?.team_name ?? "T2"}</label>
-                        <input type="number" min={0} className="input !w-20 text-center text-lg font-bold" value={s.s2}
-                          onChange={(e) => setScores((p) => ({ ...p, [m.id]: { ...p[m.id], s2: e.target.value } }))}
-                          placeholder="0" onKeyDown={(e) => e.key === "Enter" && pushScore(m.id)} />
-                      </div>
-                      <button className="btn-primary !py-2 !px-3 text-xs" onClick={() => pushScore(m.id)} disabled={busy}>
-                        {busy ? "..." : "Push"}
-                      </button>
-                    </div>
-                    {fb && <p className={`mt-2 font-mono text-xs ${fb.startsWith("Pushed") ? "text-green-400" : "text-red-400"}`}>{fb}</p>}
-                  </div>
-                );
-              })}
-            </div>
-          )
-        }
-      </div>
-    </div>
-  );
-}
-
-/* ------------------------------------------------------------------ */
-function DisputesPanel() {
-  const [matches, setMatches] = useState<Match[]>([]);
   const load = useCallback(() => {
-    fetch("/api/matches?status=disputed").then((r) => r.json()).then((j) => setMatches(j.matches ?? []));
+    fetch("/api/admin/leaderboard-image")
+      .then((r) => r.json())
+      .then((j) => setImages(j.images ?? []));
   }, []);
   useEffect(load, [load]);
-  useSocketEvents(["match:disputed", "match:finished"], () => load());
 
-  return (
-    <div className="space-y-6">
-      {matches.length === 0 && (
-        <p className="py-8 text-center text-sm text-zinc-500">No disputed matches. ðŸŽ‰</p>
-      )}
-      {matches.map((m) => <DisputeCard key={m.id} match={m} onResolved={load} />)}
-    </div>
-  );
-}
-
-function DisputeCard({ match, onResolved }: { match: Match; onResolved: () => void }) {
-  const [s1, setS1] = useState("");
-  const [s2, setS2] = useState("");
-  const [note, setNote] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  async function resolve(e: React.FormEvent) {
-    e.preventDefault();
-    setBusy(true);
-    setError(null);
-    const res = await fetch(`/api/matches/${match.id}/resolve`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ final_score1: Number(s1), final_score2: Number(s2), note }),
-    });
-    const json = await res.json();
-    setBusy(false);
-    if (!res.ok) return setError(json.error ?? "Failed to resolve");
-    onResolved();
+  function onFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const f = e.target.files?.[0] ?? null;
+    setFile(f);
+    if (f) {
+      const url = URL.createObjectURL(f);
+      setPreview(url);
+    } else {
+      setPreview(null);
+    }
   }
 
-  const sides = [
-    { label: match.team1?.team_name ?? "Team 1", sub: match.submission_team1 },
-    { label: match.team2?.team_name ?? "Team 2", sub: match.submission_team2 },
-  ];
+  async function upload(e: React.FormEvent) {
+    e.preventDefault();
+    if (!file) { setError("Please select an image first."); return; }
+    setBusy(true); setMsg(null); setError(null);
+    const fd = new FormData();
+    fd.append("image", file);
+    fd.append("title", title);
+    const res = await fetch("/api/admin/leaderboard-image", { method: "POST", body: fd });
+    const json = await res.json();
+    setBusy(false);
+    if (res.ok) {
+      setMsg("✓ Image uploaded and now visible on the Leaderboard page.");
+      setTitle(""); setFile(null); setPreview(null);
+      if (fileRef.current) fileRef.current.value = "";
+      load();
+    } else {
+      setError(json.error ?? "Upload failed.");
+    }
+  }
+
+  async function remove(id: string) {
+    if (!confirm("Remove this image from the leaderboard?")) return;
+    await fetch("/api/admin/leaderboard-image", {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id }),
+    });
+    load();
+  }
 
   return (
-    <div className="card p-5">
-      <div className="flex items-center justify-between">
-        <h3 className="font-display text-lg font-bold text-white">
-          {sides[0].label} vs {sides[1].label}
-          <span className="ml-3 text-xs font-semibold uppercase text-zinc-500">
-            {ROUND_NAMES[match.round] ?? `Round ${match.round}`} Â· {match.map}
-          </span>
-        </h3>
-        <StatusBadge status={match.status} />
-      </div>
+    <div className="space-y-8">
+      {/* Upload form */}
+      <section>
+        <h2 className="font-display text-lg font-bold uppercase text-white">
+          Upload Score Screenshot
+        </h2>
+        <p className="mt-1 font-mono text-xs text-zinc-500">
+          Take a screenshot of the scores and upload it here — it will instantly appear on the public Leaderboard page.
+        </p>
 
-      <div className="mt-4 grid gap-4 md:grid-cols-2">
-        {sides.map((side, i) => (
-          <div key={i} className="border border-night-700 bg-night-850 p-4">
-            <div className="text-xs font-bold uppercase tracking-wider text-zinc-400">
-              {side.label} reported
+        <form onSubmit={upload} className="card mt-4 max-w-2xl space-y-4 p-6">
+          {msg   && <p className="rounded border border-green-600/30 bg-green-600/10 px-3 py-2 font-mono text-xs text-green-400">{msg}</p>}
+          {error && <p className="rounded border border-red-600/30 bg-red-600/10 px-3 py-2 font-mono text-xs text-red-400">{error}</p>}
+
+          <div>
+            <label className="label">Caption / Title (optional)</label>
+            <input
+              className="input"
+              placeholder="e.g. Round 2 Results — Group A"
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              maxLength={120}
+            />
+          </div>
+
+          <div>
+            <label className="label">Score Screenshot</label>
+            <input
+              ref={fileRef}
+              type="file"
+              accept="image/*"
+              onChange={onFileChange}
+              className="block w-full cursor-pointer rounded border border-night-600 bg-night-800 px-3 py-2 text-sm text-zinc-300 file:mr-4 file:rounded file:border-0 file:bg-ember-600 file:px-4 file:py-1.5 file:text-xs file:font-bold file:uppercase file:text-white hover:file:bg-ember-500"
+            />
+          </div>
+
+          {preview && (
+            <div className="overflow-hidden rounded-lg border border-night-700">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={preview} alt="Preview" className="max-h-72 w-full object-contain bg-night-900" />
+              <p className="px-3 py-1.5 font-mono text-[10px] text-zinc-500">Preview</p>
             </div>
-            {side.sub ? (
-              <>
-                <div className="mt-1 font-display text-2xl font-bold text-white">
-                  {side.sub.score_own} â€“ {side.sub.score_opponent}
-                  <span className="ml-2 text-xs font-semibold text-zinc-500">(own â€“ opponent)</span>
-                </div>
-                <a href={side.sub.screenshot_url} target="_blank" rel="noreferrer">
+          )}
+
+          <button className="btn-primary" disabled={busy || !file}>
+            {busy ? "Uploading…" : "Upload to Leaderboard"}
+          </button>
+        </form>
+      </section>
+
+      {/* Existing images */}
+      <section>
+        <h2 className="font-display text-lg font-bold uppercase text-white">
+          Published Images ({images.length})
+        </h2>
+        {images.length === 0 ? (
+          <p className="mt-3 text-sm text-zinc-500">No images uploaded yet.</p>
+        ) : (
+          <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {images.map((img) => (
+              <div key={img.id} className="card overflow-hidden">
+                <a href={img.image_url} target="_blank" rel="noreferrer">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
-                    src={side.sub.screenshot_url}
-                    alt={`${side.label} proof`}
-                    className="mt-3 max-h-56 w-full border border-night-700 object-contain"
+                    src={img.image_url}
+                    alt={img.title ?? "Leaderboard screenshot"}
+                    className="h-48 w-full object-contain bg-night-900"
                   />
                 </a>
-                <div className="mt-2 text-[11px] text-zinc-500">
-                  Submitted {new Date(side.sub.submitted_at).toLocaleString("en-IN")}
+                <div className="flex items-center justify-between px-4 py-3">
+                  <div>
+                    <p className="text-sm font-semibold text-white">
+                      {img.title || <span className="text-zinc-500 italic">No title</span>}
+                    </p>
+                    <p className="font-mono text-[10px] text-zinc-600">
+                      {new Date(img.created_at).toLocaleString("en-IN")}
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => remove(img.id)}
+                    className="rounded border border-red-600/30 bg-red-600/10 px-3 py-1 font-mono text-xs text-red-400 hover:bg-red-600/20 transition-colors"
+                  >
+                    Remove
+                  </button>
                 </div>
-              </>
-            ) : (
-              <p className="mt-2 text-sm text-zinc-500">No submission received.</p>
-            )}
+              </div>
+            ))}
           </div>
-        ))}
-      </div>
-
-      <form onSubmit={resolve} className="mt-4 flex flex-wrap items-end gap-3">
-        {error && <p className="w-full rounded bg-red-500/10 px-3 py-2 text-xs text-red-300">{error}</p>}
-        <div>
-          <label className="label">{sides[0].label}</label>
-          <input className="input !w-24 text-center" type="number" min={0} required value={s1} onChange={(e) => setS1(e.target.value)} />
-        </div>
-        <div>
-          <label className="label">{sides[1].label}</label>
-          <input className="input !w-24 text-center" type="number" min={0} required value={s2} onChange={(e) => setS2(e.target.value)} />
-        </div>
-        <div className="min-w-48 flex-1">
-          <label className="label">Resolution note (goes to audit log)</label>
-          <input className="input" value={note} onChange={(e) => setNote(e.target.value)} placeholder="e.g. Team B screenshot matches demo" />
-        </div>
-        <button className="btn-primary !py-2.5" disabled={busy}>
-          {busy ? "Resolvingâ€¦" : "Set final score"}
-        </button>
-      </form>
+        )}
+      </section>
     </div>
   );
 }
