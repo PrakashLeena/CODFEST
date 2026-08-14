@@ -4,6 +4,7 @@ import { authOptions } from "@/lib/auth";
 import { db } from "@/lib/supabase";
 import { recalcTeamStats } from "@/lib/standings";
 import { logAudit } from "@/lib/audit";
+import { emitEvent } from "@/lib/socket";
 
 export const dynamic = "force-dynamic";
 
@@ -41,6 +42,9 @@ export async function PATCH(req: NextRequest) {
     await logAudit(session.user.id, "standings.manual_override", team_id, updates);
   }
 
+  // Broadcast to all users
+  emitEvent("leaderboard:updated", { action: "standings_updated", team: data });
+
   return NextResponse.json({ team: data });
 }
 
@@ -60,6 +64,9 @@ export async function POST(req: NextRequest) {
     const ids = (teams ?? []).map((t) => t.id);
     await recalcTeamStats(ids);
   }
+
+  // Broadcast to all users
+  emitEvent("leaderboard:updated", { action: "standings_recalculated" });
 
   return NextResponse.json({ ok: true });
 }

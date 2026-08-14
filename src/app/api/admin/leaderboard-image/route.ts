@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { uploadImage } from "@/lib/cloudinary";
 import { db } from "@/lib/supabase";
+import { emitEvent } from "@/lib/socket";
 
 export const dynamic = "force-dynamic";
 
@@ -39,6 +40,10 @@ export async function POST(req: NextRequest) {
     .single();
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  // Broadcast to all connected users so every open tab/page updates live
+  emitEvent("leaderboard:updated", { action: "image_uploaded", image: data });
+
   return NextResponse.json({ image: data });
 }
 
@@ -89,6 +94,10 @@ export async function PATCH(req: NextRequest) {
     .single();
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  // Broadcast update to all users
+  emitEvent("leaderboard:updated", { action: "image_updated", image: data });
+
   return NextResponse.json({ image: data });
 }
 
@@ -103,5 +112,9 @@ export async function DELETE(req: NextRequest) {
 
   const { error } = await db().from("leaderboard_images").delete().eq("id", id);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  // Broadcast deletion to all users
+  emitEvent("leaderboard:updated", { action: "image_deleted", id });
+
   return NextResponse.json({ ok: true });
 }
