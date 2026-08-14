@@ -8,10 +8,15 @@ export const metadata: Metadata = {
   title: "CODFEST 2026 — Call of Duty 4 Tournament",
   description:
     "CODFEST 2026: intra-departmental Call of Duty 4 Promod esports tournament. Live brackets, real-time scores, team registration.",
+  manifest: "/site.webmanifest",
   icons: {
-    icon: "/favicon.ico",
+    icon: [
+      { url: "/favicon.ico" },
+      { url: "/favicon-16x16.png", sizes: "16x16", type: "image/png" },
+      { url: "/favicon-32x32.png", sizes: "32x32", type: "image/png" },
+    ],
     shortcut: "/favicon.ico",
-    apple: "/NavBarLogo.png",
+    apple: "/apple-touch-icon.png",
   },
 };
 
