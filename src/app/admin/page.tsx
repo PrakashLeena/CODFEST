@@ -1376,56 +1376,121 @@ function LeaderboardControlPanel() {
                       </td>
                       <td className="py-2 px-3 text-center">
                         <input
-                          type="number"
-                          min={0}
+                          type="text"
+                          inputMode="numeric"
+                          pattern="[0-9]*"
                           placeholder="0"
-                          value={p.score}
+                          value={p.score ?? ""}
                           onFocus={(e) => e.target.select()}
-                          onChange={(e) => updateTeam1Row(idx, "score", e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === "ArrowUp") {
+                              e.preventDefault();
+                              updateTeam1Row(idx, "score", (Number(p.score) || 0) + 1);
+                            } else if (e.key === "ArrowDown") {
+                              e.preventDefault();
+                              updateTeam1Row(idx, "score", Math.max(0, (Number(p.score) || 0) - 1));
+                            }
+                          }}
+                          onChange={(e) => {
+                            const raw = e.target.value.replace(/[^0-9]/g, "");
+                            updateTeam1Row(idx, "score", raw === "" ? "" : Number(raw));
+                          }}
                           className="input !py-1 !text-xs font-bold text-amber-400 text-center w-20 mx-auto"
                         />
                       </td>
                       <td className="py-2 px-3 text-center">
                         <input
-                          type="number"
-                          min={0}
+                          type="text"
+                          inputMode="numeric"
+                          pattern="[0-9]*"
                           placeholder="0"
-                          value={p.kills}
+                          value={p.kills ?? ""}
                           onFocus={(e) => e.target.select()}
-                          onChange={(e) => updateTeam1Row(idx, "kills", e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === "ArrowUp") {
+                              e.preventDefault();
+                              updateTeam1Row(idx, "kills", (Number(p.kills) || 0) + 1);
+                            } else if (e.key === "ArrowDown") {
+                              e.preventDefault();
+                              updateTeam1Row(idx, "kills", Math.max(0, (Number(p.kills) || 0) - 1));
+                            }
+                          }}
+                          onChange={(e) => {
+                            const raw = e.target.value.replace(/[^0-9]/g, "");
+                            updateTeam1Row(idx, "kills", raw === "" ? "" : Number(raw));
+                          }}
                           className="input !py-1 !text-xs font-bold text-green-400 text-center w-16 mx-auto"
                         />
                       </td>
                       <td className="py-2 px-3 text-center">
                         <input
-                          type="number"
-                          min={0}
+                          type="text"
+                          inputMode="numeric"
+                          pattern="[0-9]*"
                           placeholder="0"
-                          value={p.assists}
+                          value={p.assists ?? ""}
                           onFocus={(e) => e.target.select()}
-                          onChange={(e) => updateTeam1Row(idx, "assists", e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === "ArrowUp") {
+                              e.preventDefault();
+                              updateTeam1Row(idx, "assists", (Number(p.assists) || 0) + 1);
+                            } else if (e.key === "ArrowDown") {
+                              e.preventDefault();
+                              updateTeam1Row(idx, "assists", Math.max(0, (Number(p.assists) || 0) - 1));
+                            }
+                          }}
+                          onChange={(e) => {
+                            const raw = e.target.value.replace(/[^0-9]/g, "");
+                            updateTeam1Row(idx, "assists", raw === "" ? "" : Number(raw));
+                          }}
                           className="input !py-1 !text-xs font-bold text-blue-400 text-center w-16 mx-auto"
                         />
                       </td>
                       <td className="py-2 px-3 text-center">
                         <input
-                          type="number"
-                          min={0}
+                          type="text"
+                          inputMode="numeric"
+                          pattern="[0-9]*"
                           placeholder="0"
-                          value={p.deaths}
+                          value={p.deaths ?? ""}
                           onFocus={(e) => e.target.select()}
-                          onChange={(e) => updateTeam1Row(idx, "deaths", e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === "ArrowUp") {
+                              e.preventDefault();
+                              updateTeam1Row(idx, "deaths", (Number(p.deaths) || 0) + 1);
+                            } else if (e.key === "ArrowDown") {
+                              e.preventDefault();
+                              updateTeam1Row(idx, "deaths", Math.max(0, (Number(p.deaths) || 0) - 1));
+                            }
+                          }}
+                          onChange={(e) => {
+                            const raw = e.target.value.replace(/[^0-9]/g, "");
+                            updateTeam1Row(idx, "deaths", raw === "" ? "" : Number(raw));
+                          }}
                           className="input !py-1 !text-xs font-bold text-red-400 text-center w-16 mx-auto"
                         />
                       </td>
                       <td className="py-2 px-3 text-center">
                         <input
-                          type="number"
-                          min={0}
+                          type="text"
+                          inputMode="numeric"
+                          pattern="[0-9]*"
                           placeholder="0"
-                          value={p.ping}
+                          value={p.ping ?? ""}
                           onFocus={(e) => e.target.select()}
-                          onChange={(e) => updateTeam1Row(idx, "ping", e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === "ArrowUp") {
+                              e.preventDefault();
+                              updateTeam1Row(idx, "ping", (Number(p.ping) || 0) + 1);
+                            } else if (e.key === "ArrowDown") {
+                              e.preventDefault();
+                              updateTeam1Row(idx, "ping", Math.max(0, (Number(p.ping) || 0) - 1));
+                            }
+                          }}
+                          onChange={(e) => {
+                            const raw = e.target.value.replace(/[^0-9]/g, "");
+                            updateTeam1Row(idx, "ping", raw === "" ? "" : Number(raw));
+                          }}
                           className="input !py-1 !text-xs text-zinc-400 text-center w-16 mx-auto"
                         />
                       </td>
@@ -1510,56 +1575,121 @@ function LeaderboardControlPanel() {
                       </td>
                       <td className="py-2 px-3 text-center">
                         <input
-                          type="number"
-                          min={0}
+                          type="text"
+                          inputMode="numeric"
+                          pattern="[0-9]*"
                           placeholder="0"
-                          value={p.score}
+                          value={p.score ?? ""}
                           onFocus={(e) => e.target.select()}
-                          onChange={(e) => updateTeam2Row(idx, "score", e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === "ArrowUp") {
+                              e.preventDefault();
+                              updateTeam2Row(idx, "score", (Number(p.score) || 0) + 1);
+                            } else if (e.key === "ArrowDown") {
+                              e.preventDefault();
+                              updateTeam2Row(idx, "score", Math.max(0, (Number(p.score) || 0) - 1));
+                            }
+                          }}
+                          onChange={(e) => {
+                            const raw = e.target.value.replace(/[^0-9]/g, "");
+                            updateTeam2Row(idx, "score", raw === "" ? "" : Number(raw));
+                          }}
                           className="input !py-1 !text-xs font-bold text-amber-400 text-center w-20 mx-auto"
                         />
                       </td>
                       <td className="py-2 px-3 text-center">
                         <input
-                          type="number"
-                          min={0}
+                          type="text"
+                          inputMode="numeric"
+                          pattern="[0-9]*"
                           placeholder="0"
-                          value={p.kills}
+                          value={p.kills ?? ""}
                           onFocus={(e) => e.target.select()}
-                          onChange={(e) => updateTeam2Row(idx, "kills", e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === "ArrowUp") {
+                              e.preventDefault();
+                              updateTeam2Row(idx, "kills", (Number(p.kills) || 0) + 1);
+                            } else if (e.key === "ArrowDown") {
+                              e.preventDefault();
+                              updateTeam2Row(idx, "kills", Math.max(0, (Number(p.kills) || 0) - 1));
+                            }
+                          }}
+                          onChange={(e) => {
+                            const raw = e.target.value.replace(/[^0-9]/g, "");
+                            updateTeam2Row(idx, "kills", raw === "" ? "" : Number(raw));
+                          }}
                           className="input !py-1 !text-xs font-bold text-green-400 text-center w-16 mx-auto"
                         />
                       </td>
                       <td className="py-2 px-3 text-center">
                         <input
-                          type="number"
-                          min={0}
+                          type="text"
+                          inputMode="numeric"
+                          pattern="[0-9]*"
                           placeholder="0"
-                          value={p.assists}
+                          value={p.assists ?? ""}
                           onFocus={(e) => e.target.select()}
-                          onChange={(e) => updateTeam2Row(idx, "assists", e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === "ArrowUp") {
+                              e.preventDefault();
+                              updateTeam2Row(idx, "assists", (Number(p.assists) || 0) + 1);
+                            } else if (e.key === "ArrowDown") {
+                              e.preventDefault();
+                              updateTeam2Row(idx, "assists", Math.max(0, (Number(p.assists) || 0) - 1));
+                            }
+                          }}
+                          onChange={(e) => {
+                            const raw = e.target.value.replace(/[^0-9]/g, "");
+                            updateTeam2Row(idx, "assists", raw === "" ? "" : Number(raw));
+                          }}
                           className="input !py-1 !text-xs font-bold text-blue-400 text-center w-16 mx-auto"
                         />
                       </td>
                       <td className="py-2 px-3 text-center">
                         <input
-                          type="number"
-                          min={0}
+                          type="text"
+                          inputMode="numeric"
+                          pattern="[0-9]*"
                           placeholder="0"
-                          value={p.deaths}
+                          value={p.deaths ?? ""}
                           onFocus={(e) => e.target.select()}
-                          onChange={(e) => updateTeam2Row(idx, "deaths", e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === "ArrowUp") {
+                              e.preventDefault();
+                              updateTeam2Row(idx, "deaths", (Number(p.deaths) || 0) + 1);
+                            } else if (e.key === "ArrowDown") {
+                              e.preventDefault();
+                              updateTeam2Row(idx, "deaths", Math.max(0, (Number(p.deaths) || 0) - 1));
+                            }
+                          }}
+                          onChange={(e) => {
+                            const raw = e.target.value.replace(/[^0-9]/g, "");
+                            updateTeam2Row(idx, "deaths", raw === "" ? "" : Number(raw));
+                          }}
                           className="input !py-1 !text-xs font-bold text-red-400 text-center w-16 mx-auto"
                         />
                       </td>
                       <td className="py-2 px-3 text-center">
                         <input
-                          type="number"
-                          min={0}
+                          type="text"
+                          inputMode="numeric"
+                          pattern="[0-9]*"
                           placeholder="0"
-                          value={p.ping}
+                          value={p.ping ?? ""}
                           onFocus={(e) => e.target.select()}
-                          onChange={(e) => updateTeam2Row(idx, "ping", e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === "ArrowUp") {
+                              e.preventDefault();
+                              updateTeam2Row(idx, "ping", (Number(p.ping) || 0) + 1);
+                            } else if (e.key === "ArrowDown") {
+                              e.preventDefault();
+                              updateTeam2Row(idx, "ping", Math.max(0, (Number(p.ping) || 0) - 1));
+                            }
+                          }}
+                          onChange={(e) => {
+                            const raw = e.target.value.replace(/[^0-9]/g, "");
+                            updateTeam2Row(idx, "ping", raw === "" ? "" : Number(raw));
+                          }}
                           className="input !py-1 !text-xs text-zinc-400 text-center w-16 mx-auto"
                         />
                       </td>
