@@ -3,7 +3,7 @@ import { z } from "zod";
 import { db } from "@/lib/supabase";
 import { requireRole } from "@/lib/auth";
 import { logAudit } from "@/lib/audit";
-import { MATCH_SELECT, recalcTeamStats, getLeaderboard } from "@/lib/standings";
+import { MATCH_SELECT, recalcTeamStats, getLeaderboard, getSystemSettings, updateSystemSettings } from "@/lib/standings";
 import { emitEvent } from "@/lib/socket";
 
 export const dynamic = "force-dynamic";
@@ -28,8 +28,6 @@ const clashSchema = z.object({
   status: z.enum(["finished", "live", "scheduled"]).default("finished"),
   note: z.string().optional().nullable(),
 });
-
-import { MATCH_SELECT, recalcTeamStats, getLeaderboard, getSystemSettings, updateSystemSettings } from "@/lib/standings";
 
 /**
  * GET /api/admin/clash
