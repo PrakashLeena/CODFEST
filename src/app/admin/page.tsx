@@ -30,9 +30,17 @@ export default function AdminPage() {
   const downloadExcel = async () => {
     setExporting(true);
     try {
-      const res = await fetch("/api/admin/export/registrations");
+      const res = await fetch(`/api/admin/export/registrations?t=${Date.now()}`);
       if (!res.ok) {
-        window.alert("Export failed. Please check server logs.");
+        let msg = "Export failed.";
+        try {
+          const j = await res.json();
+          msg = j.error || j.details || msg;
+        } catch {
+          const t = await res.text();
+          if (t) msg = t;
+        }
+        window.alert(`Export error (${res.status}): ${msg}`);
         return;
       }
       const blob = await res.blob();

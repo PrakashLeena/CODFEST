@@ -11,7 +11,15 @@ export function getSocket(): Socket {
     // In LAN/event mode: set NEXT_PUBLIC_SOCKET_URL=http://<server-ip>:3000
     // Leave unset for same-machine dev (relative URL).
     const url = process.env.NEXT_PUBLIC_SOCKET_URL ?? undefined;
-    socket = io(url as any, { transports: ["websocket", "polling"] });
+    socket = io(url as any, {
+      transports: ["polling", "websocket"],
+      reconnectionAttempts: 2,
+      timeout: 5000,
+      autoConnect: true,
+    });
+    socket.on("connect_error", () => {
+      // Graceful fallback to periodic polling when socket server is unavailable
+    });
   }
   return socket;
 }
