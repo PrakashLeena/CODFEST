@@ -2,7 +2,6 @@
 
 /* eslint-disable @next/next/no-img-element */
 
-import { useState } from "react";
 import Link from "next/link";
 import { motion } from "framer-motion";
 import type { Announcement } from "@/lib/types";
@@ -23,8 +22,6 @@ export default function AnimatedHomeContent({
   announcements: Announcement[];
   leaderboardImages?: LeaderboardImage[];
 }) {
-  const [selectedImg, setSelectedImg] = useState<LeaderboardImage | null>(null);
-
   return (
     <section className="site-gutter mx-auto max-w-7xl py-16 space-y-16">
       {/* ============ MISSION BRIEFING HEADER ============ */}
@@ -165,29 +162,25 @@ export default function AnimatedHomeContent({
                 whileInView={{ opacity: 1, y: 0 }}
                 viewport={{ once: true }}
                 transition={{ duration: 0.4, delay: idx * 0.1 }}
-                onClick={() => setSelectedImg(img)}
-                className="group card overflow-hidden cursor-pointer border-night-700 transition-all hover:border-ember-500/50 hover:shadow-lg hover:shadow-ember-500/10"
+                className="group card overflow-hidden border-night-700 transition-all hover:border-ember-500/50"
               >
-                <div className="relative aspect-video w-full overflow-hidden bg-night-900">
-                  <img
-                    src={img.image_url}
-                    alt={img.title ?? "Match Score"}
-                    className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
-                  />
-                  <div className="absolute inset-0 bg-gradient-to-t from-night-950/80 via-transparent opacity-0 transition-opacity group-hover:opacity-100 flex items-center justify-center">
-                    <span className="rounded-full bg-ember-600/90 px-3 py-1 text-xs font-bold text-white shadow">
-                      🔍 Click to Zoom Scoreboard
-                    </span>
+                <Link href="/leaderboard" className="block">
+                  <div className="relative aspect-video w-full overflow-hidden bg-night-900">
+                    <img
+                      src={img.image_url}
+                      alt={img.title ?? "Match Score"}
+                      className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
+                    />
                   </div>
-                </div>
-                <div className="p-4">
-                  <h3 className="font-semibold text-sm text-white group-hover:text-ember-400 transition-colors truncate">
-                    {img.title || "Match Score Screenshot"}
-                  </h3>
-                  <p className="mt-1 font-mono text-[10px] text-zinc-500">
-                    Uploaded {new Date(img.created_at).toLocaleDateString("en-IN", { dateStyle: "medium" })}
-                  </p>
-                </div>
+                  <div className="p-4">
+                    <h3 className="font-semibold text-sm text-white group-hover:text-ember-400 transition-colors truncate">
+                      {img.title || "Match Score Screenshot"}
+                    </h3>
+                    <p className="mt-1 font-mono text-[10px] text-zinc-500">
+                      Uploaded {new Date(img.created_at).toLocaleDateString("en-IN", { dateStyle: "medium" })}
+                    </p>
+                  </div>
+                </Link>
               </motion.div>
             ))}
           </div>
@@ -229,59 +222,6 @@ export default function AnimatedHomeContent({
                 <p className="mt-2 line-clamp-3 text-sm text-zinc-400">{a.body}</p>
               </motion.div>
             ))}
-          </div>
-        </div>
-      )}
-
-      {/* Lightbox Modal */}
-      {selectedImg && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 p-4 backdrop-blur-sm"
-          onClick={() => setSelectedImg(null)}
-        >
-          <div
-            className="relative max-h-[90vh] max-w-5xl overflow-hidden rounded-xl border border-night-700 bg-night-900 p-3 shadow-2xl"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex items-center justify-between border-b border-night-700 px-4 py-3">
-              <div>
-                <h3 className="font-bold text-white text-base">
-                  {selectedImg.title || "Match Score Screenshot"}
-                </h3>
-                <p className="font-mono text-xs text-zinc-400">
-                  {new Date(selectedImg.created_at).toLocaleString("en-IN")}
-                </p>
-              </div>
-              <button
-                onClick={() => setSelectedImg(null)}
-                className="rounded-lg p-2 text-zinc-400 hover:bg-night-800 hover:text-white"
-              >
-                ✕
-              </button>
-            </div>
-            <div className="p-2">
-              <img
-                src={selectedImg.image_url}
-                alt={selectedImg.title ?? "Score screenshot"}
-                className="max-h-[75vh] w-full object-contain rounded"
-              />
-            </div>
-            <div className="flex justify-end gap-2 px-4 py-2 border-t border-night-700">
-              <a
-                href={selectedImg.image_url}
-                target="_blank"
-                rel="noreferrer"
-                className="btn-ghost !py-1.5 !px-3 text-xs"
-              >
-                Open Original in New Tab ↗
-              </a>
-              <button
-                onClick={() => setSelectedImg(null)}
-                className="btn-primary !py-1.5 !px-4 text-xs"
-              >
-                Close
-              </button>
-            </div>
           </div>
         </div>
       )}

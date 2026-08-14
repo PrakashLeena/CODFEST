@@ -205,10 +205,10 @@ export default function CaptainDashboard() {
 
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {images.slice(0, 6).map((img) => (
-              <div
+              <Link
                 key={img.id}
-                onClick={() => setSelectedImg(img)}
-                className="group card overflow-hidden cursor-pointer border-night-700 transition-all hover:border-ember-500/50"
+                href="/leaderboard"
+                className="group card overflow-hidden border-night-700 transition-all hover:border-ember-500/50 block"
               >
                 <div className="relative aspect-video w-full overflow-hidden bg-night-900">
                   <img
@@ -216,75 +216,17 @@ export default function CaptainDashboard() {
                     alt={img.title ?? "Score screenshot"}
                     className="h-full w-full object-cover transition-transform group-hover:scale-105"
                   />
-                  <div className="absolute inset-0 bg-gradient-to-t from-night-950/80 via-transparent opacity-0 transition-opacity group-hover:opacity-100 flex items-center justify-center">
-                    <span className="rounded-full bg-ember-600/90 px-3 py-1 text-xs font-bold text-white shadow">
-                      🔍 Click to Zoom
-                    </span>
-                  </div>
                 </div>
                 <div className="p-3">
-                  <h3 className="font-semibold text-xs text-white truncate">
+                  <h3 className="font-semibold text-xs text-white truncate group-hover:text-ember-400">
                     {img.title || "Match Score Screenshot"}
                   </h3>
                   <p className="mt-0.5 font-mono text-[9px] text-zinc-500">
                     {new Date(img.created_at).toLocaleString("en-IN")}
                   </p>
                 </div>
-              </div>
+              </Link>
             ))}
-          </div>
-        </div>
-      )}
-
-      {/* Lightbox Modal */}
-      {selectedImg && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 p-4 backdrop-blur-sm"
-          onClick={() => setSelectedImg(null)}
-        >
-          <div
-            className="relative max-h-[90vh] max-w-5xl overflow-hidden rounded-xl border border-night-700 bg-night-900 p-3 shadow-2xl"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex items-center justify-between border-b border-night-700 px-4 py-3">
-              <div>
-                <h3 className="font-bold text-white text-base">
-                  {selectedImg.title || "Match Score Screenshot"}
-                </h3>
-                <p className="font-mono text-xs text-zinc-400">
-                  {new Date(selectedImg.created_at).toLocaleString("en-IN")}
-                </p>
-              </div>
-              <button
-                onClick={() => setSelectedImg(null)}
-                className="rounded-lg p-2 text-zinc-400 hover:bg-night-800 hover:text-white"
-              >
-                ✕
-              </button>
-            </div>
-            <div className="p-2">
-              <img
-                src={selectedImg.image_url}
-                alt={selectedImg.title ?? "Score screenshot"}
-                className="max-h-[75vh] w-full object-contain rounded"
-              />
-            </div>
-            <div className="flex justify-end gap-2 px-4 py-2 border-t border-night-700">
-              <a
-                href={selectedImg.image_url}
-                target="_blank"
-                rel="noreferrer"
-                className="btn-ghost !py-1.5 !px-3 text-xs"
-              >
-                Open Original in New Tab ↗
-              </a>
-              <button
-                onClick={() => setSelectedImg(null)}
-                className="btn-primary !py-1.5 !px-4 text-xs"
-              >
-                Close
-              </button>
-            </div>
           </div>
         </div>
       )}

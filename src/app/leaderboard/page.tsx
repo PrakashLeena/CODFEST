@@ -15,7 +15,6 @@ interface LeaderboardImage {
 export default function LeaderboardPage() {
   const [images, setImages] = useState<LeaderboardImage[]>([]);
   const [loading, setLoading] = useState(true);
-  const [selectedImg, setSelectedImg] = useState<LeaderboardImage | null>(null);
 
   const load = async () => {
     try {
@@ -80,7 +79,7 @@ export default function LeaderboardPage() {
           {images.map((img, index) => (
             <article
               key={img.id}
-              className="card overflow-hidden border-night-700 bg-night-900 shadow-2xl transition-all duration-300 hover:border-ember-500/50"
+              className="card overflow-hidden border-night-700 bg-night-900 shadow-2xl transition-all duration-300 hover:border-night-600"
             >
               {/* Header bar of each scoreboard */}
               <div className="flex flex-wrap items-center justify-between gap-3 border-b border-night-700 bg-night-800/80 px-6 py-4">
@@ -98,97 +97,26 @@ export default function LeaderboardPage() {
                   </div>
                 </div>
 
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={() => setSelectedImg(img)}
-                    className="btn-primary !py-1.5 !px-3 font-mono text-xs flex items-center gap-1.5 shadow"
-                  >
-                    <span>⛶</span> Full Screen
-                  </button>
-                  <a
-                    href={img.image_url}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="btn-ghost !py-1.5 !px-3 font-mono text-xs"
-                  >
-                    Original ↗
-                  </a>
-                </div>
+                <a
+                  href={img.image_url}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="btn-ghost !py-1.5 !px-3 font-mono text-xs"
+                >
+                  Open Original ↗
+                </a>
               </div>
 
               {/* Big High-Res Image Display */}
-              <div
-                onClick={() => setSelectedImg(img)}
-                className="group relative cursor-pointer overflow-hidden bg-black/90 flex items-center justify-center p-2 sm:p-4 min-h-[360px] md:min-h-[500px]"
-              >
+              <div className="relative overflow-hidden bg-black/90 flex items-center justify-center p-2 sm:p-4 min-h-[360px] md:min-h-[500px]">
                 <img
                   src={img.image_url}
                   alt={img.title ?? "Tournament Scoreboard"}
-                  className="max-h-[80vh] w-full object-contain transition-transform duration-300 group-hover:scale-[1.01]"
+                  className="max-h-[85vh] w-full object-contain"
                 />
-
-                {/* Hover overlay hint */}
-                <div className="absolute inset-0 bg-black/40 opacity-0 transition-opacity duration-200 group-hover:opacity-100 flex items-center justify-center">
-                  <span className="rounded-full bg-ember-600/90 px-5 py-2.5 font-display text-sm font-bold text-white shadow-xl backdrop-blur-sm transform transition-transform group-hover:scale-105">
-                    🔍 Click for Full Screen Mode
-                  </span>
-                </div>
               </div>
             </article>
           ))}
-        </div>
-      )}
-
-      {/* Fullscreen Lightbox Modal */}
-      {selectedImg && (
-        <div
-          className="fixed inset-0 z-50 flex flex-col bg-black/95 backdrop-blur-md"
-          onClick={() => setSelectedImg(null)}
-        >
-          {/* Top Control Bar */}
-          <div
-            className="flex items-center justify-between border-b border-zinc-800 bg-black/80 px-6 py-4"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div>
-              <h3 className="font-display text-lg font-bold text-white">
-                {selectedImg.title || "Match Scoreboard Screenshot"}
-              </h3>
-              <p className="font-mono text-xs text-zinc-400">
-                Uploaded {new Date(selectedImg.created_at).toLocaleString("en-IN")}
-              </p>
-            </div>
-            <div className="flex items-center gap-3">
-              <a
-                href={selectedImg.image_url}
-                target="_blank"
-                rel="noreferrer"
-                className="rounded border border-zinc-700 bg-zinc-800 px-3 py-1.5 font-mono text-xs text-zinc-300 hover:bg-zinc-700 hover:text-white transition-colors"
-              >
-                Open Original File ↗
-              </a>
-              <button
-                onClick={() => setSelectedImg(null)}
-                className="rounded-lg bg-zinc-800 p-2 text-zinc-400 hover:bg-zinc-700 hover:text-white transition-colors"
-                title="Close Fullscreen"
-              >
-                ✕ Close
-              </button>
-            </div>
-          </div>
-
-          {/* Full Screen Image Container */}
-          <div
-            className="flex-1 flex items-center justify-center p-4 overflow-auto"
-            onClick={() => setSelectedImg(null)}
-          >
-            <img
-              src={selectedImg.image_url}
-              alt={selectedImg.title ?? "Scoreboard"}
-              className="max-h-[90vh] max-w-[98vw] object-contain select-none shadow-2xl rounded"
-              onClick={(e) => e.stopPropagation()}
-            />
-          </div>
         </div>
       )}
     </div>
