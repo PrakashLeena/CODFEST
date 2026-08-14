@@ -68,10 +68,10 @@ export default function ScoreSubmitForm({
       {error && <p className="rounded bg-red-500/10 px-2 py-1.5 text-xs text-red-300">{error}</p>}
       <div className="flex items-center gap-2">
         <input className="input !w-20 text-center" type="number" min={0} required placeholder="Us"
-          value={scoreOwn} onChange={(e) => setScoreOwn(e.target.value)} />
+          value={scoreOwn} onFocus={(e) => e.target.select()} onChange={(e) => setScoreOwn(e.target.value)} />
         <span className="text-zinc-500">–</span>
         <input className="input !w-20 text-center" type="number" min={0} required placeholder="Them"
-          value={scoreOpp} onChange={(e) => setScoreOpp(e.target.value)} />
+          value={scoreOpp} onFocus={(e) => e.target.select()} onChange={(e) => setScoreOpp(e.target.value)} />
         <span className="text-xs text-zinc-500">vs {opponentName}</span>
       </div>
       <div>

@@ -29,15 +29,17 @@ const clashSchema = z.object({
   note: z.string().optional().nullable(),
 });
 
+import { MATCH_SELECT, recalcTeamStats, getLeaderboard, getSystemSettings, updateSystemSettings } from "@/lib/standings";
+
 /**
  * GET /api/admin/clash
- * Returns approved teams (with rosters and logos) and matches with clash scorecards.
+ * Returns approved teams (with rosters and logos), division categories, position orders, and matches.
  */
 export async function GET() {
   const admin = await requireRole("admin");
   if (!admin) return NextResponse.json({ error: "Admin only" }, { status: 403 });
 
-  const [{ data: teams }, { data: matches }] = await Promise.all([
+  const [{ data: teams }, { data: matches }, settings] = await Promise.all([
     db()
       .from("teams")
       .select("id, team_name, logo_url, status, points, wins, losses, draws, maps_won, maps_lost, players(id, player_name, game_id)")
@@ -47,11 +49,23 @@ export async function GET() {
       .from("matches")
       .select(MATCH_SELECT)
       .order("created_at", { ascending: false }),
+    getSystemSettings(),
   ]);
 
+  const teamCategories: Record<string, "boys" | "girls"> = settings.team_categories ?? {};
+  const teamOrders: Record<string, number> = settings.team_orders ?? {};
+
+  const enrichedTeams = (teams ?? []).map((t) => ({
+    ...t,
+    category: teamCategories[t.id] ?? "boys",
+    display_order: typeof teamOrders[t.id] === "number" ? teamOrders[t.id] : null,
+  }));
+
   return NextResponse.json({
-    teams: teams ?? [],
+    teams: enrichedTeams,
     matches: matches ?? [],
+    team_categories: teamCategories,
+    team_orders: teamOrders,
   });
 }
 
@@ -255,34 +269,112 @@ export async function DELETE(req: Request) {
 
 /**
  * PATCH /api/admin/clash
- * Direct update of team standings stats (points, wins, losses, etc.)
+ * Direct update of team standings stats (points, wins, losses, etc.),
+ * division categories (boys / girls), and custom display position ordering.
  */
 export async function PATCH(req: Request) {
   const admin = await requireRole("admin");
   if (!admin) return NextResponse.json({ error: "Admin only" }, { status: 403 });
 
   const body = await req.json().catch(() => null);
-  const { team_id, points, wins, losses, draws, maps_won, maps_lost } = body ?? {};
+  const {
+    team_id,
+    points,
+    wins,
+    losses,
+    draws,
+    maps_won,
+    maps_lost,
+    category,
+    display_order,
+    team_categories,
+    team_orders,
+    order_list,
+  } = body ?? {};
 
-  if (!team_id) {
-    return NextResponse.json({ error: "team_id required" }, { status: 400 });
+  const settings = await getSystemSettings();
+  let settingsChanged = false;
+  const currentCategories: Record<string, "boys" | "girls"> = { ...(settings.team_categories ?? {}) };
+  const currentOrders: Record<string, number> = { ...(settings.team_orders ?? {}) };
+
+  // 1. Batch category updates
+  if (team_categories && typeof team_categories === "object") {
+    Object.entries(team_categories).forEach(([tId, cat]) => {
+      if (cat === "boys" || cat === "girls") {
+        currentCategories[tId] = cat;
+        settingsChanged = true;
+      }
+    });
   }
 
-  const updates: Record<string, number> = {};
-  if (typeof points === "number") updates.points = points;
-  if (typeof wins === "number") updates.wins = wins;
-  if (typeof losses === "number") updates.losses = losses;
-  if (typeof draws === "number") updates.draws = draws;
-  if (typeof maps_won === "number") updates.maps_won = maps_won;
-  if (typeof maps_lost === "number") updates.maps_lost = maps_lost;
+  // 2. Batch order list updates
+  if (Array.isArray(order_list)) {
+    order_list.forEach((tId, idx) => {
+      if (typeof tId === "string") {
+        currentOrders[tId] = idx + 1;
+        settingsChanged = true;
+      }
+    });
+  }
 
-  const { error } = await db().from("teams").update(updates).eq("id", team_id);
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  // 3. Batch team_orders map
+  if (team_orders && typeof team_orders === "object") {
+    Object.entries(team_orders).forEach(([tId, ord]) => {
+      if (typeof ord === "number") {
+        currentOrders[tId] = ord;
+        settingsChanged = true;
+      }
+    });
+  }
+
+  // 4. Single team updates
+  if (team_id) {
+    if (category === "boys" || category === "girls") {
+      currentCategories[team_id] = category;
+      settingsChanged = true;
+    }
+
+    if (typeof display_order === "number") {
+      currentOrders[team_id] = display_order;
+      settingsChanged = true;
+    }
+
+    const updates: Record<string, any> = {};
+    if (typeof points === "number") updates.points = points;
+    if (typeof wins === "number") updates.wins = wins;
+    if (typeof losses === "number") updates.losses = losses;
+    if (typeof draws === "number") updates.draws = draws;
+    if (typeof maps_won === "number") updates.maps_won = maps_won;
+    if (typeof maps_lost === "number") updates.maps_lost = maps_lost;
+
+    if (Object.keys(updates).length > 0) {
+      await db().from("teams").update(updates).eq("id", team_id);
+    }
+  }
+
+  if (settingsChanged) {
+    await updateSystemSettings({
+      team_categories: currentCategories,
+      team_orders: currentOrders,
+    });
+  }
 
   const leaderboard = await getLeaderboard();
   emitEvent("leaderboard:updated", { leaderboard });
 
-  await logAudit(admin.id, "team.stats_manual_override", team_id, updates);
+  await logAudit(admin.id, "team.stats_manual_override", team_id ?? "batch", {
+    points,
+    wins,
+    losses,
+    category,
+    display_order,
+    settingsChanged,
+  });
 
-  return NextResponse.json({ ok: true, leaderboard });
+  return NextResponse.json({
+    ok: true,
+    leaderboard,
+    team_categories: currentCategories,
+    team_orders: currentOrders,
+  });
 }

@@ -54,29 +54,118 @@ export async function recalcTeamStats(teamIds: (string | null)[]) {
   }
 }
 
-export async function getLeaderboard() {
-  const { data } = await db()
-    .from("teams")
-    .select("id, team_name, logo_url, points, wins, losses, draws, maps_won, maps_lost, status")
-    .neq("status", "rejected")
-    .order("points", { ascending: false })
-    .order("wins", { ascending: false });
+export async function getSystemSettings(): Promise<Record<string, any>> {
+  try {
+    const { data } = await db()
+      .from("announcements")
+      .select("id, body")
+      .eq("title", "__SYSTEM_SETTINGS__")
+      .maybeSingle();
 
-  return (data ?? [])
-    .sort((a, b) =>
+    if (data?.body) {
+      try {
+        return JSON.parse(data.body);
+      } catch {
+        return {};
+      }
+    }
+  } catch {
+    // fallback
+  }
+  return {};
+}
+
+export async function updateSystemSettings(newValues: Record<string, any>) {
+  try {
+    const current = await getSystemSettings();
+    const merged = { ...current, ...newValues };
+    const newBody = JSON.stringify(merged);
+
+    const { data: existing } = await db()
+      .from("announcements")
+      .select("id")
+      .eq("title", "__SYSTEM_SETTINGS__")
+      .maybeSingle();
+
+    if (existing?.id) {
+      await db().from("announcements").update({ body: newBody }).eq("id", existing.id);
+    } else {
+      await db().from("announcements").insert({ title: "__SYSTEM_SETTINGS__", body: newBody });
+    }
+    return merged;
+  } catch (e) {
+    console.error("[updateSystemSettings error]", e);
+    return null;
+  }
+}
+
+export async function getLeaderboard() {
+  const [{ data }, settings] = await Promise.all([
+    db()
+      .from("teams")
+      .select("id, team_name, logo_url, points, wins, losses, draws, maps_won, maps_lost, status")
+      .neq("status", "rejected")
+      .order("points", { ascending: false })
+      .order("wins", { ascending: false }),
+    getSystemSettings(),
+  ]);
+
+  const teamCategories: Record<string, "boys" | "girls"> = settings.team_categories ?? {};
+  const teamOrders: Record<string, number> = settings.team_orders ?? {};
+
+  const rawList = (data ?? []).map((t) => {
+    const category: "boys" | "girls" = teamCategories[t.id] ?? "boys";
+    const customOrder: number | null = typeof teamOrders[t.id] === "number" ? teamOrders[t.id] : null;
+    const played = t.wins + t.losses + t.draws;
+    const win_rate = played ? Math.round((t.wins / played) * 100) : 0;
+    return {
+      ...t,
+      category,
+      custom_order: customOrder,
+      played,
+      win_rate,
+    };
+  });
+
+  // Sort list:
+  // 1. If custom_order is defined on both, sort by custom_order.
+  // 2. If custom_order is defined on one, place that one ahead according to custom_order.
+  // 3. Fallback: points -> maps difference -> wins.
+  const sorted = [...rawList].sort((a, b) => {
+    if (a.custom_order !== null && b.custom_order !== null) {
+      return a.custom_order - b.custom_order;
+    }
+    if (a.custom_order !== null) return -1;
+    if (b.custom_order !== null) return 1;
+    return (
       b.points - a.points ||
       (b.maps_won - b.maps_lost) - (a.maps_won - a.maps_lost) ||
       b.wins - a.wins
-    )
-    .map((t, i) => {
-      const played = t.wins + t.losses + t.draws;
-      return {
-        rank: i + 1,
-        ...t,
-        played,
-        win_rate: played ? Math.round((t.wins / played) * 100) : 0,
-      };
-    });
+    );
+  });
+
+  return sorted.map((t, i) => ({
+    rank: i + 1,
+    ...t,
+  }));
+}
+
+export async function getLeaderboardSplits() {
+  const fullLeaderboard = await getLeaderboard();
+
+  const boysTeams = fullLeaderboard
+    .filter((t) => t.category === "boys")
+    .map((t, idx) => ({ ...t, rank: idx + 1 }));
+
+  const girlsTeams = fullLeaderboard
+    .filter((t) => t.category === "girls")
+    .map((t, idx) => ({ ...t, rank: idx + 1 }));
+
+  return {
+    leaderboard: fullLeaderboard,
+    boys_leaderboard: boysTeams,
+    girls_leaderboard: girlsTeams,
+  };
 }
 
 export const MATCH_SELECT =

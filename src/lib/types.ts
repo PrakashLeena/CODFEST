@@ -17,10 +17,14 @@ export interface ScoreSubmission {
   submitted_at: string;
 }
 
+export type TeamDivision = "boys" | "girls";
+
 export interface Team {
   id: string;
   team_name: string;
   logo_url: string | null;
+  category?: TeamDivision;
+  display_order?: number | null;
   discord: string | null;
   whatsapp: string | null;
   email: string | null;

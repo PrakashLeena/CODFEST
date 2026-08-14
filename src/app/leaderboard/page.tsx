@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import TeamMark from "@/components/TeamMark";
 import StatusBadge from "@/components/StatusBadge";
@@ -12,6 +12,7 @@ interface LeaderboardRow {
   id: string;
   team_name: string;
   logo_url: string | null;
+  category?: "boys" | "girls";
   points: number;
   wins: number;
   losses: number;
@@ -66,6 +67,9 @@ export default function LeaderboardPage() {
   const [refreshing, setRefreshing] = useState(false);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
 
+  // Division split filter state ("all" | "boys" | "girls")
+  const [division, setDivision] = useState<"all" | "boys" | "girls">("all");
+
   // Slide carousel state
   const [slideIndex, setSlideIndex] = useState(0);
   const [slideDirection, setSlideDirection] = useState(1);
@@ -107,23 +111,42 @@ export default function LeaderboardPage() {
     }
   );
 
+  const boysCount = rows.filter((r) => r.category === "boys").length;
+  const girlsCount = rows.filter((r) => r.category === "girls").length;
+
+  const displayRows = useMemo(() => {
+    if (division === "all") return rows;
+    return rows
+      .filter((r) => (r.category ?? "boys") === division)
+      .map((r, i) => ({ ...r, rank: i + 1 }));
+  }, [rows, division]);
+
+  const displayClashes = useMemo(() => {
+    if (division === "all") return clashes;
+    return clashes.filter((c: any) => {
+      const cat1 = c.team1_category ?? "boys";
+      const cat2 = c.team2_category ?? "boys";
+      return cat1 === division || cat2 === division;
+    });
+  }, [clashes, division]);
+
   const nextSlide = useCallback(() => {
-    if (clashes.length <= 1) return;
+    if (displayClashes.length <= 1) return;
     setSlideDirection(1);
-    setSlideIndex((prev) => (prev + 1) % clashes.length);
-  }, [clashes.length]);
+    setSlideIndex((prev) => (prev + 1) % displayClashes.length);
+  }, [displayClashes.length]);
 
   const prevSlide = useCallback(() => {
-    if (clashes.length <= 1) return;
+    if (displayClashes.length <= 1) return;
     setSlideDirection(-1);
-    setSlideIndex((prev) => (prev - 1 + clashes.length) % clashes.length);
-  }, [clashes.length]);
+    setSlideIndex((prev) => (prev - 1 + displayClashes.length) % displayClashes.length);
+  }, [displayClashes.length]);
 
   useEffect(() => {
-    if (!autoSlide || clashes.length <= 1) return;
+    if (!autoSlide || displayClashes.length <= 1) return;
     const timer = setInterval(nextSlide, 6000);
     return () => clearInterval(timer);
-  }, [autoSlide, clashes.length, nextSlide]);
+  }, [autoSlide, displayClashes.length, nextSlide]);
 
   // Check if any match or score has been recorded yet
   const hasAnyScores =
@@ -136,7 +159,7 @@ export default function LeaderboardPage() {
     );
 
   return (
-    <div className="site-gutter mx-auto max-w-7xl py-6 sm:py-10 space-y-8 sm:space-y-12 px-3 sm:px-6">
+    <div className="site-gutter mx-auto max-w-7xl py-6 sm:py-10 space-y-8 sm:space-y-10 px-3 sm:px-6">
       {/* HEADER TITLE & 5-MIN SYNC BADGE */}
       <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 border-b border-night-700 pb-5 sm:pb-6">
         <div>
@@ -164,6 +187,59 @@ export default function LeaderboardPage() {
               </span>
             )}
           </div>
+        </div>
+      </div>
+
+      {/* DIVISION SPLIT SWITCHER BAR */}
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 rounded-2xl border border-night-700 bg-gradient-to-r from-night-850 via-night-900 to-night-850 p-3 sm:p-4 shadow-xl backdrop-blur-md">
+        <div className="flex items-center gap-2">
+          <span className="h-2.5 w-2.5 rounded-full bg-ember-400" />
+          <span className="font-mono text-xs font-bold uppercase tracking-wider text-zinc-300">
+            Division Category:
+          </span>
+        </div>
+        <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
+          <button
+            onClick={() => { setDivision("all"); setSlideIndex(0); }}
+            className={`flex-1 sm:flex-initial flex items-center justify-center gap-2 rounded-xl px-4 py-2 font-mono text-xs font-bold transition-all ${
+              division === "all"
+                ? "border border-amber-500/60 bg-amber-500/20 text-amber-300 shadow-[0_0_15px_rgba(245,158,11,0.25)]"
+                : "border border-night-700 bg-night-800 text-zinc-400 hover:text-white"
+            }`}
+          >
+            <span>🏆 All Teams</span>
+            <span className="rounded-full bg-night-900 px-2 py-0.5 text-[10px] text-zinc-300 border border-night-700">
+              {rows.length}
+            </span>
+          </button>
+
+          <button
+            onClick={() => { setDivision("boys"); setSlideIndex(0); }}
+            className={`flex-1 sm:flex-initial flex items-center justify-center gap-2 rounded-xl px-4 py-2 font-mono text-xs font-bold transition-all ${
+              division === "boys"
+                ? "border border-blue-500/70 bg-blue-600/25 text-blue-300 shadow-[0_0_20px_rgba(59,130,246,0.35)]"
+                : "border border-night-700 bg-night-800 text-zinc-400 hover:text-white"
+            }`}
+          >
+            <span>👦 Boys Division</span>
+            <span className="rounded-full bg-blue-950 px-2 py-0.5 text-[10px] text-blue-300 border border-blue-500/30">
+              {boysCount}
+            </span>
+          </button>
+
+          <button
+            onClick={() => { setDivision("girls"); setSlideIndex(0); }}
+            className={`flex-1 sm:flex-initial flex items-center justify-center gap-2 rounded-xl px-4 py-2 font-mono text-xs font-bold transition-all ${
+              division === "girls"
+                ? "border border-pink-500/70 bg-pink-600/25 text-pink-300 shadow-[0_0_20px_rgba(236,72,153,0.35)]"
+                : "border border-night-700 bg-night-800 text-zinc-400 hover:text-white"
+            }`}
+          >
+            <span>👧 Girls Division</span>
+            <span className="rounded-full bg-pink-950 px-2 py-0.5 text-[10px] text-pink-300 border border-pink-500/30">
+              {girlsCount}
+            </span>
+          </button>
         </div>
       </div>
 
@@ -221,7 +297,7 @@ export default function LeaderboardPage() {
           <div className="relative overflow-hidden min-h-[380px] sm:min-h-[440px]">
             <AnimatePresence initial={false} custom={slideDirection} mode="wait">
               {(() => {
-                const current = clashes[slideIndex] ?? clashes[0];
+                const current = displayClashes[slideIndex] ?? displayClashes[0];
                 if (!current) return null;
 
                 const sub1 = current.submission_team1 as any;
@@ -233,6 +309,9 @@ export default function LeaderboardPage() {
                 const score2 = current.final_score2 ?? sub2?.score_own ?? 0;
                 const isWinner1 = current.winner_id === current.team1?.id || (score1 > score2 && score1 > 0);
                 const isWinner2 = current.winner_id === current.team2?.id || (score2 > score1 && score2 > 0);
+
+                const cat1 = (current as any).team1_category ?? "boys";
+                const cat2 = (current as any).team2_category ?? "boys";
 
                 return (
                   <motion.div
@@ -266,6 +345,13 @@ export default function LeaderboardPage() {
                             <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
                               <span className="rounded bg-blue-500/20 px-2 py-0.5 font-mono text-[9px] sm:text-[10px] font-bold uppercase text-blue-400">
                                 TEAM A
+                              </span>
+                              <span className={`rounded px-2 py-0.5 font-mono text-[9px] sm:text-[10px] font-bold uppercase ${
+                                cat1 === "girls"
+                                  ? "border border-pink-500/40 bg-pink-500/20 text-pink-300"
+                                  : "border border-blue-500/40 bg-blue-500/20 text-blue-300"
+                              }`}>
+                                {cat1 === "girls" ? "👧 GIRLS" : "👦 BOYS"}
                               </span>
                               {isWinner1 && (
                                 <span className="flex items-center gap-1 rounded bg-amber-500/20 px-1.5 sm:px-2 py-0.5 font-mono text-[9px] sm:text-[10px] font-bold uppercase text-amber-400 border border-amber-500/40 animate-pulse">
@@ -305,6 +391,13 @@ export default function LeaderboardPage() {
                                   🏆 VICTORY
                                 </span>
                               )}
+                              <span className={`rounded px-2 py-0.5 font-mono text-[9px] sm:text-[10px] font-bold uppercase ${
+                                cat2 === "girls"
+                                  ? "border border-pink-500/40 bg-pink-500/20 text-pink-300"
+                                  : "border border-blue-500/40 bg-blue-500/20 text-blue-300"
+                              }`}>
+                                {cat2 === "girls" ? "👧 GIRLS" : "👦 BOYS"}
+                              </span>
                               <span className="rounded bg-red-500/20 px-2 py-0.5 font-mono text-[9px] sm:text-[10px] font-bold uppercase text-red-400">
                                 TEAM B
                               </span>
@@ -345,7 +438,7 @@ export default function LeaderboardPage() {
                           </span>
                         </div>
                         <div className="flex items-center gap-1.5">
-                          {clashes.map((_, i) => (
+                          {displayClashes.map((_, i) => (
                             <button
                               key={i}
                               onClick={() => {
@@ -362,27 +455,26 @@ export default function LeaderboardPage() {
                       </div>
                     </div>
 
-                    {/* MEMBER STATS SCORECARD TABLES */}
+                    {/* SCORECARD TABLES */}
                     <div className="grid gap-4 sm:gap-6 lg:grid-cols-2">
-                      {/* TEAM A SCORECARD */}
-                      <div className="rounded-xl sm:rounded-2xl border border-blue-900/40 bg-night-850 p-3.5 sm:p-5 shadow-xl">
-                        <div className="flex items-center justify-between border-b border-night-800 pb-2.5 sm:pb-3 mb-3 sm:mb-4">
+                      {/* TEAM A STATS TABLE */}
+                      <div className="rounded-xl sm:rounded-2xl border border-blue-900/40 bg-night-850 p-3 sm:p-4 shadow-xl">
+                        <div className="flex items-center justify-between border-b border-night-800 pb-2 mb-3">
                           <div className="flex items-center gap-2">
-                            <span className="h-2.5 w-2.5 rounded-full bg-blue-500 flex-shrink-0" />
-                            <span className="font-display font-bold text-sm sm:text-base uppercase text-blue-400 truncate max-w-[180px] sm:max-w-none">
-                              {current.team1?.team_name ?? "Team A"} Roster
+                            <span className="h-2.5 w-2.5 rounded-full bg-blue-500" />
+                            <span className="font-display text-xs sm:text-sm font-bold uppercase text-blue-400 truncate max-w-[200px]">
+                              {current.team1?.team_name ?? "Team A"} Scorecard
                             </span>
                           </div>
-                          <span className="font-mono text-[11px] sm:text-xs font-bold text-blue-300 bg-blue-950/60 px-2 py-0.5 sm:px-2.5 sm:py-1 rounded border border-blue-800/40 whitespace-nowrap">
+                          <span className="font-mono text-xs font-black text-blue-300 bg-blue-500/10 px-2 py-0.5 rounded border border-blue-500/30">
                             Total: {score1} PTS
                           </span>
                         </div>
-
-                        <div className="overflow-x-auto -mx-1 px-1">
-                          <table className="w-full min-w-[440px] text-left font-mono text-xs">
+                        <div className="overflow-x-auto">
+                          <table className="w-full text-left font-mono text-xs">
                             <thead>
-                              <tr className="border-b border-night-750 text-[10px] uppercase tracking-wider text-zinc-400 bg-night-800/60">
-                                <th className="py-2 px-2.5">Member</th>
+                              <tr className="border-b border-night-700 text-[10px] uppercase text-zinc-500 bg-night-800/40">
+                                <th className="py-2 px-2.5">Player</th>
                                 <th className="py-2 px-2 text-right">Score</th>
                                 <th className="py-2 px-2 text-center">K</th>
                                 <th className="py-2 px-2 text-center">A</th>
@@ -391,7 +483,7 @@ export default function LeaderboardPage() {
                                 <th className="py-2 px-2 text-right">Ping</th>
                               </tr>
                             </thead>
-                            <tbody className="divide-y divide-night-800/70">
+                            <tbody className="divide-y divide-night-800/60">
                               {pList1.length === 0 ? (
                                 <tr>
                                   <td colSpan={7} className="py-6 text-center text-zinc-500">
@@ -403,7 +495,7 @@ export default function LeaderboardPage() {
                                   const kd = p.deaths > 0 ? (p.kills / p.deaths).toFixed(2) : p.kills.toFixed(2);
                                   return (
                                     <tr key={idx} className="hover:bg-night-800/40 transition-colors">
-                                      <td className="py-2 px-2.5 font-bold text-white truncate max-w-[110px] sm:max-w-[130px]">{p.name}</td>
+                                      <td className="py-2 px-2.5 font-bold text-white truncate max-w-[130px]">{p.name}</td>
                                       <td className="py-2 px-2 text-right font-bold text-amber-400">{p.score}</td>
                                       <td className="py-2 px-2 text-center text-green-400">{p.kills}</td>
                                       <td className="py-2 px-2 text-center text-blue-400">{p.assists}</td>
@@ -419,25 +511,24 @@ export default function LeaderboardPage() {
                         </div>
                       </div>
 
-                      {/* TEAM B SCORECARD */}
-                      <div className="rounded-xl sm:rounded-2xl border border-red-900/40 bg-night-850 p-3.5 sm:p-5 shadow-xl">
-                        <div className="flex items-center justify-between border-b border-night-800 pb-2.5 sm:pb-3 mb-3 sm:mb-4">
+                      {/* TEAM B STATS TABLE */}
+                      <div className="rounded-xl sm:rounded-2xl border border-red-900/40 bg-night-850 p-3 sm:p-4 shadow-xl">
+                        <div className="flex items-center justify-between border-b border-night-800 pb-2 mb-3">
                           <div className="flex items-center gap-2">
-                            <span className="h-2.5 w-2.5 rounded-full bg-red-500 flex-shrink-0" />
-                            <span className="font-display font-bold text-sm sm:text-base uppercase text-red-400 truncate max-w-[180px] sm:max-w-none">
-                              {current.team2?.team_name ?? "Team B"} Roster
+                            <span className="h-2.5 w-2.5 rounded-full bg-red-500" />
+                            <span className="font-display text-xs sm:text-sm font-bold uppercase text-red-400 truncate max-w-[200px]">
+                              {current.team2?.team_name ?? "Team B"} Scorecard
                             </span>
                           </div>
-                          <span className="font-mono text-[11px] sm:text-xs font-bold text-red-300 bg-red-950/60 px-2 py-0.5 sm:px-2.5 sm:py-1 rounded border border-red-800/40 whitespace-nowrap">
+                          <span className="font-mono text-xs font-black text-red-300 bg-red-500/10 px-2 py-0.5 rounded border border-red-500/30">
                             Total: {score2} PTS
                           </span>
                         </div>
-
-                        <div className="overflow-x-auto -mx-1 px-1">
-                          <table className="w-full min-w-[440px] text-left font-mono text-xs">
+                        <div className="overflow-x-auto">
+                          <table className="w-full text-left font-mono text-xs">
                             <thead>
-                              <tr className="border-b border-night-750 text-[10px] uppercase tracking-wider text-zinc-400 bg-night-800/60">
-                                <th className="py-2 px-2.5">Member</th>
+                              <tr className="border-b border-night-700 text-[10px] uppercase text-zinc-500 bg-night-800/40">
+                                <th className="py-2 px-2.5">Player</th>
                                 <th className="py-2 px-2 text-right">Score</th>
                                 <th className="py-2 px-2 text-center">K</th>
                                 <th className="py-2 px-2 text-center">A</th>
@@ -446,7 +537,7 @@ export default function LeaderboardPage() {
                                 <th className="py-2 px-2 text-right">Ping</th>
                               </tr>
                             </thead>
-                            <tbody className="divide-y divide-night-800/70">
+                            <tbody className="divide-y divide-night-800/60">
                               {pList2.length === 0 ? (
                                 <tr>
                                   <td colSpan={7} className="py-6 text-center text-zinc-500">
@@ -458,7 +549,7 @@ export default function LeaderboardPage() {
                                   const kd = p.deaths > 0 ? (p.kills / p.deaths).toFixed(2) : p.kills.toFixed(2);
                                   return (
                                     <tr key={idx} className="hover:bg-night-800/40 transition-colors">
-                                      <td className="py-2 px-2.5 font-bold text-white truncate max-w-[110px] sm:max-w-[130px]">{p.name}</td>
+                                      <td className="py-2 px-2.5 font-bold text-white truncate max-w-[130px]">{p.name}</td>
                                       <td className="py-2 px-2 text-right font-bold text-amber-400">{p.score}</td>
                                       <td className="py-2 px-2 text-center text-green-400">{p.kills}</td>
                                       <td className="py-2 px-2 text-center text-blue-400">{p.assists}</td>
@@ -485,9 +576,24 @@ export default function LeaderboardPage() {
       {/* SECTION 2: OFFICIAL TOURNAMENT STANDINGS */}
       {hasAnyScores ? (
         <div className="space-y-4">
-          <div className="flex items-center justify-between">
-            <h2 className="section-title text-lg sm:text-xl">Overall Team Standings</h2>
-            <span className="font-mono text-xs text-zinc-400">{rows.length} Active Teams</span>
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+            <div>
+              <h2 className="section-title text-lg sm:text-xl">
+                {division === "boys"
+                  ? "👦 Boys Division Standings"
+                  : division === "girls"
+                  ? "👧 Girls Division Standings"
+                  : "🏆 Overall Team Standings"}
+              </h2>
+              <p className="font-mono text-xs text-zinc-400">
+                {division === "all"
+                  ? "Showing all registered teams across all divisions"
+                  : `Filtered by ${division === "boys" ? "Boys" : "Girls"} Division`}
+              </p>
+            </div>
+            <span className="font-mono text-xs text-zinc-400">
+              {displayRows.length} {displayRows.length === 1 ? "Team" : "Teams"}
+            </span>
           </div>
 
           {/* MOBILE CARD VIEW (Optimized for Phones < 640px) */}
@@ -496,12 +602,12 @@ export default function LeaderboardPage() {
               <div className="p-8 text-center text-zinc-500 font-mono text-xs card">
                 Loading standings…
               </div>
-            ) : rows.length === 0 ? (
+            ) : displayRows.length === 0 ? (
               <div className="p-8 text-center text-zinc-500 font-mono text-xs card">
-                No approved teams yet.
+                No teams found in this division.
               </div>
             ) : (
-              rows.map((r) => (
+              displayRows.map((r) => (
                 <div
                   key={r.id}
                   className={`card p-4 space-y-3 border ${
@@ -514,7 +620,7 @@ export default function LeaderboardPage() {
                       : "border-night-700 bg-night-850"
                   }`}
                 >
-                  {/* Top Row: Rank + Team + Points */}
+                  {/* Top Row: Rank + Team + Category + Points */}
                   <div className="flex items-center justify-between gap-3">
                     <div className="flex items-center gap-3 min-w-0 flex-1">
                       <div className="flex items-center justify-center font-mono font-black text-sm w-7 h-7 rounded-lg bg-night-800 border border-night-700 flex-shrink-0">
@@ -527,8 +633,21 @@ export default function LeaderboardPage() {
                         )}
                       </div>
                       <TeamMark name={r.team_name} logoUrl={r.logo_url} size={28} />
-                      <div className="font-display font-bold text-white uppercase text-sm truncate">
-                        {r.team_name}
+                      <div className="min-w-0">
+                        <div className="font-display font-bold text-white uppercase text-sm truncate">
+                          {r.team_name}
+                        </div>
+                        <div className="mt-0.5">
+                          {r.category === "girls" ? (
+                            <span className="inline-block rounded border border-pink-500/40 bg-pink-500/10 px-1.5 py-0.2 font-mono text-[9px] font-bold text-pink-300">
+                              👧 GIRLS
+                            </span>
+                          ) : (
+                            <span className="inline-block rounded border border-blue-500/40 bg-blue-500/10 px-1.5 py-0.2 font-mono text-[9px] font-bold text-blue-300">
+                              👦 BOYS
+                            </span>
+                          )}
+                        </div>
                       </div>
                     </div>
 
@@ -571,6 +690,7 @@ export default function LeaderboardPage() {
                 <tr className="border-b border-night-700 bg-night-800 text-left font-mono text-[10px] font-bold uppercase tracking-[0.1em] text-zinc-400">
                   <th className="px-5 py-4 w-16">#</th>
                   <th className="px-5 py-4">Team</th>
+                  <th className="px-4 py-4 text-center w-24">Division</th>
                   <th className="px-4 py-4 text-center w-24">PTS</th>
                   <th className="px-4 py-4 text-center w-20">Played</th>
                   <th className="px-4 py-4 text-center w-16 text-green-400">W</th>
@@ -583,18 +703,18 @@ export default function LeaderboardPage() {
               <tbody className="divide-y divide-night-800">
                 {loading ? (
                   <tr>
-                    <td colSpan={9} className="px-4 py-16 text-center text-zinc-500 font-mono">
+                    <td colSpan={10} className="px-4 py-16 text-center text-zinc-500 font-mono">
                       Loading standings…
                     </td>
                   </tr>
-                ) : rows.length === 0 ? (
+                ) : displayRows.length === 0 ? (
                   <tr>
-                    <td colSpan={9} className="px-4 py-16 text-center text-zinc-500 font-mono">
-                      No approved teams yet.
+                    <td colSpan={10} className="px-4 py-16 text-center text-zinc-500 font-mono">
+                      No teams found in this division.
                     </td>
                   </tr>
                 ) : (
-                  rows.map((r) => {
+                  displayRows.map((r) => {
                     return (
                       <tr
                         key={r.id}
@@ -628,6 +748,17 @@ export default function LeaderboardPage() {
                         </td>
                         <td className="px-5 py-4">
                           <TeamMark name={r.team_name} logoUrl={r.logo_url} size={32} />
+                        </td>
+                        <td className="px-4 py-4 text-center">
+                          {r.category === "girls" ? (
+                            <span className="rounded-full border border-pink-500/50 bg-pink-500/10 px-2.5 py-1 font-mono text-[10px] font-bold text-pink-300 shadow-[0_0_10px_rgba(236,72,153,0.2)]">
+                              👧 Girls
+                            </span>
+                          ) : (
+                            <span className="rounded-full border border-blue-500/50 bg-blue-500/10 px-2.5 py-1 font-mono text-[10px] font-bold text-blue-300 shadow-[0_0_10px_rgba(59,130,246,0.2)]">
+                              👦 Boys
+                            </span>
+                          )}
                         </td>
                         <td className="px-4 py-4 text-center text-xl font-black text-amber-400">{r.points}</td>
                         <td className="px-4 py-4 text-center text-zinc-400">{r.played}</td>

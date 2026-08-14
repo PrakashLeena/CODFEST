@@ -2,7 +2,7 @@
 
 /* eslint-disable @next/next/no-img-element */
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSession } from "next-auth/react";
 import Link from "next/link";
 import { motion, AnimatePresence } from "framer-motion";
@@ -352,11 +352,11 @@ function FixturesPanel() {
 
 interface PlayerStatRow {
   name: string;
-  score: number;
-  kills: number;
-  assists: number;
-  deaths: number;
-  ping: number;
+  score: number | string;
+  kills: number | string;
+  assists: number | string;
+  deaths: number | string;
+  ping: number | string;
 }
 
 interface TeamWithRoster {
@@ -364,6 +364,8 @@ interface TeamWithRoster {
   team_name: string;
   logo_url: string | null;
   status: string;
+  category?: "boys" | "girls";
+  display_order?: number | null;
   points: number;
   wins: number;
   losses: number;
@@ -403,6 +405,12 @@ function LeaderboardControlPanel() {
   const [teams, setTeams] = useState<TeamWithRoster[]>([]);
   const [matches, setMatches] = useState<Match[]>([]);
   const [loading, setLoading] = useState(true);
+
+  // Division split filter state ("all" | "boys" | "girls")
+  const [adminDivision, setAdminDivision] = useState<"all" | "boys" | "girls">("all");
+  const [standingsSearch, setStandingsSearch] = useState("");
+  const [batchSaveBusy, setBatchSaveBusy] = useState(false);
+  const [batchSaveMsg, setBatchSaveMsg] = useState<string | null>(null);
 
   // Clash editor state
   const [selectedMatchId, setSelectedMatchId] = useState<string | null>(null);
@@ -571,7 +579,10 @@ function LeaderboardControlPanel() {
   const updateTeam1Row = (index: number, field: keyof PlayerStatRow, val: any) => {
     setTeam1Players((prev) => {
       const next = [...prev];
-      next[index] = { ...next[index], [field]: field === "name" ? val : Number(val) || 0 };
+      next[index] = {
+        ...next[index],
+        [field]: field === "name" ? val : val === "" ? "" : isNaN(Number(val)) ? val : Number(val),
+      };
       return next;
     });
   };
@@ -579,7 +590,10 @@ function LeaderboardControlPanel() {
   const updateTeam2Row = (index: number, field: keyof PlayerStatRow, val: any) => {
     setTeam2Players((prev) => {
       const next = [...prev];
-      next[index] = { ...next[index], [field]: field === "name" ? val : Number(val) || 0 };
+      next[index] = {
+        ...next[index],
+        [field]: field === "name" ? val : val === "" ? "" : isNaN(Number(val)) ? val : Number(val),
+      };
       return next;
     });
   };
@@ -656,8 +670,22 @@ function LeaderboardControlPanel() {
         map: mapName,
         round: roundNum,
         status: matchStatus,
-        team1_players: team1Players,
-        team2_players: team2Players,
+        team1_players: team1Players.map((p) => ({
+          name: p.name || "Player",
+          score: Number(p.score) || 0,
+          kills: Number(p.kills) || 0,
+          assists: Number(p.assists) || 0,
+          deaths: Number(p.deaths) || 0,
+          ping: Number(p.ping) || 0,
+        })),
+        team2_players: team2Players.map((p) => ({
+          name: p.name || "Player",
+          score: Number(p.score) || 0,
+          kills: Number(p.kills) || 0,
+          assists: Number(p.assists) || 0,
+          deaths: Number(p.deaths) || 0,
+          ping: Number(p.ping) || 0,
+        })),
         note: matchNote || undefined,
       };
 
@@ -716,11 +744,19 @@ function LeaderboardControlPanel() {
     const edit = editingStandings[teamId];
     if (!edit) return;
     setStandingsBusy((p) => ({ ...p, [teamId]: true }));
+    const cleanEdit = {
+      ...(edit.points !== undefined ? { points: Number(edit.points) || 0 } : {}),
+      ...(edit.wins !== undefined ? { wins: Number(edit.wins) || 0 } : {}),
+      ...(edit.losses !== undefined ? { losses: Number(edit.losses) || 0 } : {}),
+      ...(edit.draws !== undefined ? { draws: Number(edit.draws) || 0 } : {}),
+      ...(edit.maps_won !== undefined ? { maps_won: Number(edit.maps_won) || 0 } : {}),
+      ...(edit.maps_lost !== undefined ? { maps_lost: Number(edit.maps_lost) || 0 } : {}),
+    };
     try {
       const res = await fetch("/api/admin/clash", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ team_id: teamId, ...edit }),
+        body: JSON.stringify({ team_id: teamId, ...cleanEdit }),
       });
       if (res.ok) {
         loadData();
@@ -732,6 +768,121 @@ function LeaderboardControlPanel() {
       }
     } finally {
       setStandingsBusy((p) => ({ ...p, [teamId]: false }));
+    }
+  };
+
+  const boysCount = teams.filter((t) => (t.category ?? "boys") === "boys").length;
+  const girlsCount = teams.filter((t) => t.category === "girls").length;
+
+  const sortedAndFilteredTeams = useMemo(() => {
+    let list = [...teams];
+    if (adminDivision !== "all") {
+      list = list.filter((t) => (t.category ?? "boys") === adminDivision);
+    }
+    if (standingsSearch.trim()) {
+      const q = standingsSearch.toLowerCase();
+      list = list.filter((t) => t.team_name.toLowerCase().includes(q));
+    }
+    return list.sort((a, b) => {
+      const ordA = a.display_order ?? null;
+      const ordB = b.display_order ?? null;
+      if (ordA !== null && ordB !== null) return ordA - ordB;
+      if (ordA !== null) return -1;
+      if (ordB !== null) return 1;
+      return (
+        b.points - a.points ||
+        (b.maps_won - b.maps_lost) - (a.maps_won - a.maps_lost) ||
+        b.wins - a.wins
+      );
+    });
+  }, [teams, adminDivision, standingsSearch]);
+
+  // Reorder team up/down
+  const moveTeamPosition = async (teamId: string, direction: "up" | "down") => {
+    const list = [...sortedAndFilteredTeams];
+    const currentIndex = list.findIndex((t) => t.id === teamId);
+    if (currentIndex === -1) return;
+    const targetIndex = direction === "up" ? currentIndex - 1 : currentIndex + 1;
+    if (targetIndex < 0 || targetIndex >= list.length) return;
+
+    const currentTeam = list[currentIndex];
+    const targetTeam = list[targetIndex];
+    list[currentIndex] = targetTeam;
+    list[targetIndex] = currentTeam;
+
+    const newOrders: Record<string, number> = {};
+    list.forEach((t, idx) => {
+      newOrders[t.id] = idx + 1;
+    });
+
+    setTeams((prev) =>
+      prev.map((t) => (newOrders[t.id] ? { ...t, display_order: newOrders[t.id] } : t))
+    );
+
+    try {
+      await fetch("/api/admin/clash", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ team_orders: newOrders }),
+      });
+      loadData();
+    } catch {
+      // ignore
+    }
+  };
+
+  // Change team division (boys / girls)
+  const changeTeamCategory = async (teamId: string, newCat: "boys" | "girls") => {
+    setTeams((prev) =>
+      prev.map((t) => (t.id === teamId ? { ...t, category: newCat } : t))
+    );
+
+    try {
+      await fetch("/api/admin/clash", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ team_id: teamId, category: newCat }),
+      });
+      loadData();
+    } catch {
+      // ignore
+    }
+  };
+
+  // Change numeric position directly
+  const changeTeamPosition = async (teamId: string, pos: number) => {
+    setTeams((prev) =>
+      prev.map((t) => (t.id === teamId ? { ...t, display_order: pos } : t))
+    );
+
+    try {
+      await fetch("/api/admin/clash", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ team_id: teamId, display_order: pos }),
+      });
+      loadData();
+    } catch {
+      // ignore
+    }
+  };
+
+  // Save all modified standings and positions
+  const saveAllModifiedStandings = async () => {
+    const teamIds = Object.keys(editingStandings);
+    if (teamIds.length === 0) return;
+    setBatchSaveBusy(true);
+    setBatchSaveMsg(null);
+    try {
+      for (const tId of teamIds) {
+        await saveStandingsOverride(tId);
+      }
+      setBatchSaveMsg("✓ All standings saved successfully.");
+      setTimeout(() => setBatchSaveMsg(null), 3000);
+    } catch {
+      setBatchSaveMsg("Error saving some standings.");
+    } finally {
+      setBatchSaveBusy(false);
     }
   };
 
@@ -758,6 +909,64 @@ function LeaderboardControlPanel() {
 
   return (
     <div className="space-y-10">
+      {/* TOP DIVISION SPLIT FILTER CONTROLS */}
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 rounded-2xl border border-night-700 bg-night-850 p-4 shadow-xl">
+        <div className="flex items-center gap-3">
+          <span className="h-3 w-3 rounded-full bg-ember-400 animate-pulse" />
+          <div>
+            <h2 className="font-display text-sm font-bold uppercase tracking-wider text-white">
+              Division Filter & Maintenance
+            </h2>
+            <p className="font-mono text-[11px] text-zinc-400">
+              Manage Boys & Girls divisions and set custom standings ranking
+            </p>
+          </div>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            onClick={() => setAdminDivision("all")}
+            className={`flex items-center gap-2 rounded-xl px-4 py-2 font-mono text-xs font-bold transition-all ${
+              adminDivision === "all"
+                ? "border border-amber-500/60 bg-amber-500/20 text-amber-300 shadow-[0_0_15px_rgba(245,158,11,0.2)]"
+                : "border border-night-700 bg-night-800 text-zinc-400 hover:text-white"
+            }`}
+          >
+            <span>🏆 All Teams</span>
+            <span className="rounded-full bg-night-900 px-2 py-0.5 text-[10px] text-zinc-300 border border-night-700">
+              {teams.length}
+            </span>
+          </button>
+
+          <button
+            onClick={() => setAdminDivision("boys")}
+            className={`flex items-center gap-2 rounded-xl px-4 py-2 font-mono text-xs font-bold transition-all ${
+              adminDivision === "boys"
+                ? "border border-blue-500/70 bg-blue-600/25 text-blue-300 shadow-[0_0_15px_rgba(59,130,246,0.3)]"
+                : "border border-night-700 bg-night-800 text-zinc-400 hover:text-white"
+            }`}
+          >
+            <span>👦 Boys Division</span>
+            <span className="rounded-full bg-blue-950 px-2 py-0.5 text-[10px] text-blue-300 border border-blue-500/30">
+              {boysCount}
+            </span>
+          </button>
+
+          <button
+            onClick={() => setAdminDivision("girls")}
+            className={`flex items-center gap-2 rounded-xl px-4 py-2 font-mono text-xs font-bold transition-all ${
+              adminDivision === "girls"
+                ? "border border-pink-500/70 bg-pink-600/25 text-pink-300 shadow-[0_0_15px_rgba(236,72,153,0.3)]"
+                : "border border-night-700 bg-night-800 text-zinc-400 hover:text-white"
+            }`}
+          >
+            <span>👧 Girls Division</span>
+            <span className="rounded-full bg-pink-950 px-2 py-0.5 text-[10px] text-pink-300 border border-pink-500/30">
+              {girlsCount}
+            </span>
+          </button>
+        </div>
+      </div>
+
       {/* SECTION 1: CLASH SLIDES SHOWCASE (CAROUSEL WITH RIGHT-SLIDE ANIMATION) */}
       <div className="rounded-2xl border border-night-700 bg-night-900/90 p-6 shadow-2xl backdrop-blur-md">
         <div className="flex flex-wrap items-center justify-between gap-4 border-b border-night-800 pb-4">
@@ -1066,6 +1275,7 @@ function LeaderboardControlPanel() {
                 <option value="" disabled>-- Select Team A --</option>
                 {teams.map((t) => (
                   <option key={t.id} value={t.id}>
+                    {t.category === "girls" ? "[GIRLS] " : "[BOYS] "}
                     {t.team_name} ({t.players?.length ?? 0} members)
                   </option>
                 ))}
@@ -1090,6 +1300,7 @@ function LeaderboardControlPanel() {
                 <option value="" disabled>-- Select Team B --</option>
                 {teams.map((t) => (
                   <option key={t.id} value={t.id}>
+                    {t.category === "girls" ? "[GIRLS] " : "[BOYS] "}
                     {t.team_name} ({t.players?.length ?? 0} members)
                   </option>
                 ))}
@@ -1149,7 +1360,9 @@ function LeaderboardControlPanel() {
               </thead>
               <tbody className="divide-y divide-night-800">
                 {team1Players.map((p, idx) => {
-                  const kd = p.deaths > 0 ? (p.kills / p.deaths).toFixed(2) : p.kills.toFixed(2);
+                  const kills = Number(p.kills) || 0;
+                  const deaths = Number(p.deaths) || 0;
+                  const kd = deaths > 0 ? (kills / deaths).toFixed(2) : kills.toFixed(2);
                   return (
                     <tr key={idx} className="hover:bg-night-800/40">
                       <td className="py-2 px-3">
@@ -1165,7 +1378,9 @@ function LeaderboardControlPanel() {
                         <input
                           type="number"
                           min={0}
+                          placeholder="0"
                           value={p.score}
+                          onFocus={(e) => e.target.select()}
                           onChange={(e) => updateTeam1Row(idx, "score", e.target.value)}
                           className="input !py-1 !text-xs font-bold text-amber-400 text-center w-20 mx-auto"
                         />
@@ -1174,7 +1389,9 @@ function LeaderboardControlPanel() {
                         <input
                           type="number"
                           min={0}
+                          placeholder="0"
                           value={p.kills}
+                          onFocus={(e) => e.target.select()}
                           onChange={(e) => updateTeam1Row(idx, "kills", e.target.value)}
                           className="input !py-1 !text-xs font-bold text-green-400 text-center w-16 mx-auto"
                         />
@@ -1183,7 +1400,9 @@ function LeaderboardControlPanel() {
                         <input
                           type="number"
                           min={0}
+                          placeholder="0"
                           value={p.assists}
+                          onFocus={(e) => e.target.select()}
                           onChange={(e) => updateTeam1Row(idx, "assists", e.target.value)}
                           className="input !py-1 !text-xs font-bold text-blue-400 text-center w-16 mx-auto"
                         />
@@ -1192,7 +1411,9 @@ function LeaderboardControlPanel() {
                         <input
                           type="number"
                           min={0}
+                          placeholder="0"
                           value={p.deaths}
+                          onFocus={(e) => e.target.select()}
                           onChange={(e) => updateTeam1Row(idx, "deaths", e.target.value)}
                           className="input !py-1 !text-xs font-bold text-red-400 text-center w-16 mx-auto"
                         />
@@ -1201,7 +1422,9 @@ function LeaderboardControlPanel() {
                         <input
                           type="number"
                           min={0}
+                          placeholder="0"
                           value={p.ping}
+                          onFocus={(e) => e.target.select()}
                           onChange={(e) => updateTeam1Row(idx, "ping", e.target.value)}
                           className="input !py-1 !text-xs text-zinc-400 text-center w-16 mx-auto"
                         />
@@ -1271,7 +1494,9 @@ function LeaderboardControlPanel() {
               </thead>
               <tbody className="divide-y divide-night-800">
                 {team2Players.map((p, idx) => {
-                  const kd = p.deaths > 0 ? (p.kills / p.deaths).toFixed(2) : p.kills.toFixed(2);
+                  const kills = Number(p.kills) || 0;
+                  const deaths = Number(p.deaths) || 0;
+                  const kd = deaths > 0 ? (kills / deaths).toFixed(2) : kills.toFixed(2);
                   return (
                     <tr key={idx} className="hover:bg-night-800/40">
                       <td className="py-2 px-3">
@@ -1287,7 +1512,9 @@ function LeaderboardControlPanel() {
                         <input
                           type="number"
                           min={0}
+                          placeholder="0"
                           value={p.score}
+                          onFocus={(e) => e.target.select()}
                           onChange={(e) => updateTeam2Row(idx, "score", e.target.value)}
                           className="input !py-1 !text-xs font-bold text-amber-400 text-center w-20 mx-auto"
                         />
@@ -1296,7 +1523,9 @@ function LeaderboardControlPanel() {
                         <input
                           type="number"
                           min={0}
+                          placeholder="0"
                           value={p.kills}
+                          onFocus={(e) => e.target.select()}
                           onChange={(e) => updateTeam2Row(idx, "kills", e.target.value)}
                           className="input !py-1 !text-xs font-bold text-green-400 text-center w-16 mx-auto"
                         />
@@ -1305,7 +1534,9 @@ function LeaderboardControlPanel() {
                         <input
                           type="number"
                           min={0}
+                          placeholder="0"
                           value={p.assists}
+                          onFocus={(e) => e.target.select()}
                           onChange={(e) => updateTeam2Row(idx, "assists", e.target.value)}
                           className="input !py-1 !text-xs font-bold text-blue-400 text-center w-16 mx-auto"
                         />
@@ -1314,7 +1545,9 @@ function LeaderboardControlPanel() {
                         <input
                           type="number"
                           min={0}
+                          placeholder="0"
                           value={p.deaths}
+                          onFocus={(e) => e.target.select()}
                           onChange={(e) => updateTeam2Row(idx, "deaths", e.target.value)}
                           className="input !py-1 !text-xs font-bold text-red-400 text-center w-16 mx-auto"
                         />
@@ -1323,7 +1556,9 @@ function LeaderboardControlPanel() {
                         <input
                           type="number"
                           min={0}
+                          placeholder="0"
                           value={p.ping}
+                          onFocus={(e) => e.target.select()}
                           onChange={(e) => updateTeam2Row(idx, "ping", e.target.value)}
                           className="input !py-1 !text-xs text-zinc-400 text-center w-16 mx-auto"
                         />
@@ -1424,25 +1659,93 @@ function LeaderboardControlPanel() {
         </div>
       </div>
 
-      {/* SECTION 3: QUICK STANDINGS OVERRIDE TABLE */}
+      {/* SECTION 3: DIRECT TEAM STANDINGS MANAGER & POSITION REORDERING */}
       <div className="rounded-2xl border border-night-700 bg-night-900/90 p-6 shadow-xl">
-        <div className="flex items-center justify-between border-b border-night-800 pb-4">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 border-b border-night-800 pb-4">
           <div>
             <h2 className="font-display text-lg font-bold uppercase tracking-wider text-white">
               Direct Team Standings Manager
             </h2>
             <p className="mt-1 font-mono text-xs text-zinc-400">
-              Fine-tune points, wins, losses, draws, and map scores directly
+              Control rankings with ▲ / ▼ buttons, type custom `# Pos`, switch Boys/Girls divisions, and fine-tune stats
             </p>
           </div>
-          <span className="font-mono text-xs text-zinc-500">{teams.length} Approved Teams</span>
+          <div className="flex flex-wrap items-center gap-2">
+            {Object.keys(editingStandings).length > 0 && (
+              <button
+                onClick={saveAllModifiedStandings}
+                disabled={batchSaveBusy}
+                className="flex items-center gap-1.5 rounded-lg border border-amber-500/50 bg-amber-500/20 px-3.5 py-1.5 font-mono text-xs font-bold text-amber-300 hover:bg-amber-500/30 transition-all shadow-[0_0_15px_rgba(245,158,11,0.25)]"
+              >
+                <span>💾</span>
+                <span>{batchSaveBusy ? "Saving All…" : `Save All Changes (${Object.keys(editingStandings).length})`}</span>
+              </button>
+            )}
+            <span className="font-mono text-xs text-zinc-400 bg-night-800 px-3 py-1.5 rounded-lg border border-night-700">
+              {sortedAndFilteredTeams.length} {sortedAndFilteredTeams.length === 1 ? "Team" : "Teams"}
+            </span>
+          </div>
         </div>
 
-        <div className="mt-6 overflow-x-auto">
-          <table className="w-full min-w-[700px] text-left font-mono text-xs">
+        {/* CONTROLS BAR: DIVISION TABS + SEARCH */}
+        <div className="mt-4 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-night-850 p-3 rounded-xl border border-night-800">
+          <div className="flex items-center gap-1.5">
+            <button
+              onClick={() => setAdminDivision("all")}
+              className={`px-3 py-1.5 rounded-lg font-mono text-xs font-bold transition-colors ${
+                adminDivision === "all"
+                  ? "bg-amber-500/20 text-amber-300 border border-amber-500/40"
+                  : "bg-night-800 text-zinc-400 hover:text-white"
+              }`}
+            >
+              All Divisions ({teams.length})
+            </button>
+            <button
+              onClick={() => setAdminDivision("boys")}
+              className={`px-3 py-1.5 rounded-lg font-mono text-xs font-bold transition-colors ${
+                adminDivision === "boys"
+                  ? "bg-blue-600/20 text-blue-300 border border-blue-500/40"
+                  : "bg-night-800 text-zinc-400 hover:text-white"
+              }`}
+            >
+              👦 Boys ({boysCount})
+            </button>
+            <button
+              onClick={() => setAdminDivision("girls")}
+              className={`px-3 py-1.5 rounded-lg font-mono text-xs font-bold transition-colors ${
+                adminDivision === "girls"
+                  ? "bg-pink-600/20 text-pink-300 border border-pink-500/40"
+                  : "bg-night-800 text-zinc-400 hover:text-white"
+              }`}
+            >
+              👧 Girls ({girlsCount})
+            </button>
+          </div>
+
+          <div className="w-full sm:w-64">
+            <input
+              type="text"
+              placeholder="Search team in manager…"
+              value={standingsSearch}
+              onChange={(e) => setStandingsSearch(e.target.value)}
+              className="input !py-1 !text-xs w-full"
+            />
+          </div>
+        </div>
+
+        {batchSaveMsg && (
+          <div className="mt-3 rounded-lg border border-green-500/40 bg-green-500/10 px-3 py-2 font-mono text-xs text-green-300">
+            {batchSaveMsg}
+          </div>
+        )}
+
+        <div className="mt-4 overflow-x-auto">
+          <table className="w-full min-w-[850px] text-left font-mono text-xs">
             <thead>
               <tr className="border-b border-night-700 bg-night-800 text-[10px] font-bold uppercase text-zinc-400">
+                <th className="py-3 px-3 w-28">Order / Pos</th>
                 <th className="py-3 px-3">Team</th>
+                <th className="py-3 px-2 text-center w-28">Division</th>
                 <th className="py-3 px-2 text-center w-20">Points</th>
                 <th className="py-3 px-2 text-center w-16">Wins</th>
                 <th className="py-3 px-2 text-center w-16">Losses</th>
@@ -1453,7 +1756,7 @@ function LeaderboardControlPanel() {
               </tr>
             </thead>
             <tbody className="divide-y divide-night-800">
-              {teams.map((t) => {
+              {sortedAndFilteredTeams.map((t, idx) => {
                 const currentEdit = editingStandings[t.id] ?? {};
                 const pts = currentEdit.points ?? t.points;
                 const w = currentEdit.wins ?? t.wins;
@@ -1461,26 +1764,94 @@ function LeaderboardControlPanel() {
                 const d = currentEdit.draws ?? t.draws;
                 const mw = currentEdit.maps_won ?? t.maps_won;
                 const ml = currentEdit.maps_lost ?? t.maps_lost;
+                const cat = currentEdit.category ?? t.category ?? "boys";
                 const isModified = Object.keys(currentEdit).length > 0;
                 const busy = standingsBusy[t.id] ?? false;
 
                 return (
-                  <tr key={t.id} className="hover:bg-night-850">
+                  <tr key={t.id} className="hover:bg-night-850 transition-colors">
+                    {/* ORDER / POSITION CONTROL COLUMN */}
+                    <td className="py-2.5 px-3">
+                      <div className="flex items-center gap-1.5">
+                        <div className="flex flex-col gap-0.5">
+                          <button
+                            type="button"
+                            onClick={() => moveTeamPosition(t.id, "up")}
+                            disabled={idx === 0}
+                            className="rounded bg-night-800 px-1.5 py-0.5 text-[10px] font-bold text-zinc-300 hover:bg-ember-500 hover:text-white transition-colors disabled:opacity-30"
+                            title="Move team position UP"
+                          >
+                            ▲
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => moveTeamPosition(t.id, "down")}
+                            disabled={idx === sortedAndFilteredTeams.length - 1}
+                            className="rounded bg-night-800 px-1.5 py-0.5 text-[10px] font-bold text-zinc-300 hover:bg-ember-500 hover:text-white transition-colors disabled:opacity-30"
+                            title="Move team position DOWN"
+                          >
+                            ▼
+                          </button>
+                        </div>
+                        <input
+                          type="number"
+                          min={1}
+                          placeholder={String(idx + 1)}
+                          value={t.display_order ?? idx + 1}
+                          onFocus={(e) => e.target.select()}
+                          onChange={(e) => {
+                            const val = e.target.value === "" ? idx + 1 : Number(e.target.value);
+                            changeTeamPosition(t.id, val);
+                          }}
+                          className="input !py-1 !px-1.5 !text-xs font-bold text-center w-11"
+                          title="Custom display rank position"
+                        />
+                      </div>
+                    </td>
+
+                    {/* TEAM NAME & LOGO */}
                     <td className="py-2.5 px-3">
                       <div className="flex items-center gap-2.5">
                         <TeamMark name={t.team_name} logoUrl={t.logo_url} size={28} />
-                        <span className="font-bold text-white truncate">{t.team_name}</span>
+                        <span className="font-bold text-white truncate max-w-[180px]">{t.team_name}</span>
                       </div>
                     </td>
+
+                    {/* DIVISION SELECTOR TOGGLE */}
+                    <td className="py-2 px-2 text-center">
+                      <select
+                        value={cat}
+                        onChange={(e) => {
+                          const newCat = e.target.value as "boys" | "girls";
+                          changeTeamCategory(t.id, newCat);
+                          setEditingStandings((p) => ({
+                            ...p,
+                            [t.id]: { ...p[t.id], category: newCat },
+                          }));
+                        }}
+                        className={`input !py-1 !text-[11px] font-bold text-center rounded-lg ${
+                          cat === "girls"
+                            ? "border-pink-500/50 bg-pink-950/40 text-pink-300"
+                            : "border-blue-500/50 bg-blue-950/40 text-blue-300"
+                        }`}
+                      >
+                        <option value="boys">👦 Boys</option>
+                        <option value="girls">👧 Girls</option>
+                      </select>
+                    </td>
+
+                    {/* STATS INPUTS */}
                     <td className="py-2 px-2 text-center">
                       <input
                         type="number"
                         min={0}
-                        value={pts}
+                        placeholder="0"
+                        value={pts ?? ""}
+                        onFocus={(e) => e.target.select()}
                         onChange={(e) =>
                           setEditingStandings((p) => ({
                             ...p,
-                            [t.id]: { ...p[t.id], points: Number(e.target.value) || 0 },
+                            [t.id]: { ...p[t.id], points: e.target.value === "" ? ("" as any) : Number(e.target.value) },
                           }))
                         }
                         className="input !py-1 !text-xs font-bold text-amber-400 text-center w-16 mx-auto"
@@ -1490,11 +1861,13 @@ function LeaderboardControlPanel() {
                       <input
                         type="number"
                         min={0}
-                        value={w}
+                        placeholder="0"
+                        value={w ?? ""}
+                        onFocus={(e) => e.target.select()}
                         onChange={(e) =>
                           setEditingStandings((p) => ({
                             ...p,
-                            [t.id]: { ...p[t.id], wins: Number(e.target.value) || 0 },
+                            [t.id]: { ...p[t.id], wins: e.target.value === "" ? ("" as any) : Number(e.target.value) },
                           }))
                         }
                         className="input !py-1 !text-xs font-bold text-green-400 text-center w-14 mx-auto"
@@ -1504,11 +1877,13 @@ function LeaderboardControlPanel() {
                       <input
                         type="number"
                         min={0}
-                        value={l}
+                        placeholder="0"
+                        value={l ?? ""}
+                        onFocus={(e) => e.target.select()}
                         onChange={(e) =>
                           setEditingStandings((p) => ({
                             ...p,
-                            [t.id]: { ...p[t.id], losses: Number(e.target.value) || 0 },
+                            [t.id]: { ...p[t.id], losses: e.target.value === "" ? ("" as any) : Number(e.target.value) },
                           }))
                         }
                         className="input !py-1 !text-xs font-bold text-red-400 text-center w-14 mx-auto"
@@ -1518,11 +1893,13 @@ function LeaderboardControlPanel() {
                       <input
                         type="number"
                         min={0}
-                        value={d}
+                        placeholder="0"
+                        value={d ?? ""}
+                        onFocus={(e) => e.target.select()}
                         onChange={(e) =>
                           setEditingStandings((p) => ({
                             ...p,
-                            [t.id]: { ...p[t.id], draws: Number(e.target.value) || 0 },
+                            [t.id]: { ...p[t.id], draws: e.target.value === "" ? ("" as any) : Number(e.target.value) },
                           }))
                         }
                         className="input !py-1 !text-xs font-bold text-zinc-400 text-center w-14 mx-auto"
@@ -1532,11 +1909,13 @@ function LeaderboardControlPanel() {
                       <input
                         type="number"
                         min={0}
-                        value={mw}
+                        placeholder="0"
+                        value={mw ?? ""}
+                        onFocus={(e) => e.target.select()}
                         onChange={(e) =>
                           setEditingStandings((p) => ({
                             ...p,
-                            [t.id]: { ...p[t.id], maps_won: Number(e.target.value) || 0 },
+                            [t.id]: { ...p[t.id], maps_won: e.target.value === "" ? ("" as any) : Number(e.target.value) },
                           }))
                         }
                         className="input !py-1 !text-xs text-zinc-300 text-center w-14 mx-auto"
@@ -1546,11 +1925,13 @@ function LeaderboardControlPanel() {
                       <input
                         type="number"
                         min={0}
-                        value={ml}
+                        placeholder="0"
+                        value={ml ?? ""}
+                        onFocus={(e) => e.target.select()}
                         onChange={(e) =>
                           setEditingStandings((p) => ({
                             ...p,
-                            [t.id]: { ...p[t.id], maps_lost: Number(e.target.value) || 0 },
+                            [t.id]: { ...p[t.id], maps_lost: e.target.value === "" ? ("" as any) : Number(e.target.value) },
                           }))
                         }
                         className="input !py-1 !text-xs text-zinc-300 text-center w-14 mx-auto"
