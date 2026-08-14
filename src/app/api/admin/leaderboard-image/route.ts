@@ -42,6 +42,56 @@ export async function POST(req: NextRequest) {
   return NextResponse.json({ image: data });
 }
 
+/** PATCH — admin updates title and/or replaces screenshot image */
+export async function PATCH(req: NextRequest) {
+  const session = await getServerSession(authOptions);
+  if (session?.user?.role !== "admin")
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+
+  const contentType = req.headers.get("content-type") || "";
+  let id: string = "";
+  let title: string | undefined = undefined;
+  let imageUrl: string | undefined = undefined;
+
+  if (contentType.includes("multipart/form-data")) {
+    const formData = await req.formData();
+    id = (formData.get("id") as string) ?? "";
+    if (formData.has("title")) {
+      title = (formData.get("title") as string)?.trim() ?? "";
+    }
+    const file = formData.get("image") as File | null;
+    if (file && file.size > 0) {
+      const buffer = Buffer.from(await file.arrayBuffer());
+      imageUrl = await uploadImage(buffer, "codfest/leaderboard");
+    }
+  } else {
+    const body = await req.json().catch(() => ({}));
+    id = body.id;
+    if (body.title !== undefined) title = body.title?.trim() ?? "";
+    if (body.image_url) imageUrl = body.image_url;
+  }
+
+  if (!id) return NextResponse.json({ error: "Missing image id" }, { status: 400 });
+
+  const updates: Record<string, any> = {};
+  if (title !== undefined) updates.title = title || null;
+  if (imageUrl) updates.image_url = imageUrl;
+
+  if (Object.keys(updates).length === 0) {
+    return NextResponse.json({ error: "No fields to update" }, { status: 400 });
+  }
+
+  const { data, error } = await db()
+    .from("leaderboard_images")
+    .update(updates)
+    .eq("id", id)
+    .select()
+    .single();
+
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  return NextResponse.json({ image: data });
+}
+
 /** DELETE — admin removes an image by id */
 export async function DELETE(req: NextRequest) {
   const session = await getServerSession(authOptions);

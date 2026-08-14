@@ -239,29 +239,74 @@ interface LeaderboardImage {
   created_at: string;
 }
 
-function LeaderboardPanel() {
-  const [images, setImages]   = useState<LeaderboardImage[]>([]);
-  const [title, setTitle]     = useState("");
-  const [file, setFile]       = useState<File | null>(null);
-  const [preview, setPreview] = useState<string | null>(null);
-  const [busy, setBusy]       = useState(false);
-  const [msg, setMsg]         = useState<string | null>(null);
-  const [error, setError]     = useState<string | null>(null);
-  const fileRef               = useRef<HTMLInputElement>(null);
+interface TeamStandingRow {
+  id: string;
+  team_name: string;
+  logo_url: string | null;
+  points: number;
+  wins: number;
+  losses: number;
+  draws: number;
+  maps_won: number;
+  maps_lost: number;
+}
 
-  const load = useCallback(() => {
-    fetch("/api/admin/leaderboard-image")
-      .then((r) => r.json())
-      .then((j) => setImages(j.images ?? []));
+function LeaderboardPanel() {
+  /* --- Images State --- */
+  const [images, setImages]       = useState<LeaderboardImage[]>([]);
+  const [title, setTitle]         = useState("");
+  const [file, setFile]           = useState<File | null>(null);
+  const [preview, setPreview]     = useState<string | null>(null);
+  const [busy, setBusy]           = useState(false);
+  const [msg, setMsg]             = useState<string | null>(null);
+  const [error, setError]         = useState<string | null>(null);
+  const fileRef                   = useRef<HTMLInputElement>(null);
+
+  /* --- Image Edit Modal State --- */
+  const [editingImg, setEditingImg]       = useState<LeaderboardImage | null>(null);
+  const [editTitle, setEditTitle]         = useState("");
+  const [editFile, setEditFile]           = useState<File | null>(null);
+  const [editPreview, setEditPreview]     = useState<string | null>(null);
+  const [editBusy, setEditBusy]           = useState(false);
+  const [editError, setEditError]         = useState<string | null>(null);
+  const editFileRef                       = useRef<HTMLInputElement>(null);
+
+  /* --- Standings State --- */
+  const [standings, setStandings]         = useState<TeamStandingRow[]>([]);
+  const [editingTeam, setEditingTeam]     = useState<TeamStandingRow | null>(null);
+  const [teamForm, setTeamForm]           = useState({
+    points: 0,
+    wins: 0,
+    losses: 0,
+    draws: 0,
+    maps_won: 0,
+    maps_lost: 0,
+  });
+  const [standingsBusy, setStandingsBusy] = useState(false);
+  const [standingsMsg, setStandingsMsg]   = useState<string | null>(null);
+
+  const loadData = useCallback(async () => {
+    try {
+      const [imgRes, leadRes] = await Promise.all([
+        fetch("/api/admin/leaderboard-image"),
+        fetch("/api/leaderboard"),
+      ]);
+      const imgJson = await imgRes.json();
+      const leadJson = await leadRes.json();
+      setImages(imgJson.images ?? []);
+      setStandings(leadJson.leaderboard ?? []);
+    } catch {
+      /* silent */
+    }
   }, []);
-  useEffect(load, [load]);
+
+  useEffect(() => { loadData(); }, [loadData]);
 
   function onFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const f = e.target.files?.[0] ?? null;
     setFile(f);
     if (f) {
-      const url = URL.createObjectURL(f);
-      setPreview(url);
+      setPreview(URL.createObjectURL(f));
     } else {
       setPreview(null);
     }
@@ -281,39 +326,150 @@ function LeaderboardPanel() {
       setMsg("✓ Image uploaded and now visible on the Leaderboard page.");
       setTitle(""); setFile(null); setPreview(null);
       if (fileRef.current) fileRef.current.value = "";
-      load();
+      loadData();
     } else {
       setError(json.error ?? "Upload failed.");
     }
   }
 
+  function startEditImage(img: LeaderboardImage) {
+    setEditingImg(img);
+    setEditTitle(img.title ?? "");
+    setEditFile(null);
+    setEditPreview(null);
+    setEditError(null);
+  }
+
+  function onEditFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const f = e.target.files?.[0] ?? null;
+    setEditFile(f);
+    if (f) {
+      setEditPreview(URL.createObjectURL(f));
+    } else {
+      setEditPreview(null);
+    }
+  }
+
+  async function saveEditImage(e: React.FormEvent) {
+    e.preventDefault();
+    if (!editingImg) return;
+    setEditBusy(true); setEditError(null);
+    try {
+      let res: Response;
+      if (editFile) {
+        const fd = new FormData();
+        fd.append("id", editingImg.id);
+        fd.append("title", editTitle);
+        fd.append("image", editFile);
+        res = await fetch("/api/admin/leaderboard-image", { method: "PATCH", body: fd });
+      } else {
+        res = await fetch("/api/admin/leaderboard-image", {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ id: editingImg.id, title: editTitle }),
+        });
+      }
+      const json = await res.json();
+      setEditBusy(false);
+      if (res.ok) {
+        setEditingImg(null);
+        setMsg("✓ Score screenshot updated successfully.");
+        loadData();
+      } else {
+        setEditError(json.error ?? "Failed to update image.");
+      }
+    } catch {
+      setEditBusy(false);
+      setEditError("Failed to update image.");
+    }
+  }
+
   async function remove(id: string) {
-    if (!confirm("Remove this image from the leaderboard?")) return;
-    await fetch("/api/admin/leaderboard-image", {
+    if (!confirm("Are you sure you want to delete this score screenshot from the leaderboard?")) return;
+    const res = await fetch("/api/admin/leaderboard-image", {
       method: "DELETE",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ id }),
     });
-    load();
+    if (res.ok) {
+      setMsg("✓ Screenshot deleted.");
+      loadData();
+    }
+  }
+
+  /* --- Standings Update Handlers --- */
+  function startEditTeam(team: TeamStandingRow) {
+    setEditingTeam(team);
+    setTeamForm({
+      points: team.points,
+      wins: team.wins,
+      losses: team.losses,
+      draws: team.draws,
+      maps_won: team.maps_won,
+      maps_lost: team.maps_lost,
+    });
+    setStandingsMsg(null);
+  }
+
+  async function saveTeamStandings(e: React.FormEvent) {
+    e.preventDefault();
+    if (!editingTeam) return;
+    setStandingsBusy(true);
+    const res = await fetch("/api/admin/standings", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        team_id: editingTeam.id,
+        ...teamForm,
+      }),
+    });
+    setStandingsBusy(false);
+    if (res.ok) {
+      setEditingTeam(null);
+      setStandingsMsg(`✓ Updated standings for ${editingTeam.team_name}.`);
+      loadData();
+      setTimeout(() => setStandingsMsg(null), 4000);
+    } else {
+      const j = await res.json();
+      setStandingsMsg(j.error ?? "Failed to update team standings.");
+    }
+  }
+
+  async function recalculateAll() {
+    if (!confirm("Recalculate all standings directly from finished matches?")) return;
+    setStandingsBusy(true);
+    const res = await fetch("/api/admin/standings", { method: "POST" });
+    setStandingsBusy(false);
+    if (res.ok) {
+      setStandingsMsg("✓ All team standings recalculated successfully.");
+      loadData();
+      setTimeout(() => setStandingsMsg(null), 4000);
+    }
   }
 
   return (
-    <div className="space-y-8">
-      {/* Upload form */}
-      <section>
-        <h2 className="font-display text-lg font-bold uppercase text-white">
-          Upload Score Screenshot
-        </h2>
-        <p className="mt-1 font-mono text-xs text-zinc-500">
-          Take a screenshot of the scores and upload it here — it will instantly appear on the public Leaderboard page.
-        </p>
+    <div className="space-y-12">
+      {/* SECTION 1: SCORE SCREENSHOTS MANAGEMENT */}
+      <section className="space-y-6">
+        <div>
+          <h2 className="font-display text-lg font-bold uppercase text-white">
+            Score Screenshots (Leaderboard Images)
+          </h2>
+          <p className="mt-1 font-mono text-xs text-zinc-400">
+            Upload, update, caption, and delete match score screenshots that appear on the public Leaderboard.
+          </p>
+        </div>
 
-        <form onSubmit={upload} className="card mt-4 max-w-2xl space-y-4 p-6">
+        {/* Upload Form */}
+        <form onSubmit={upload} className="card max-w-2xl space-y-4 p-6">
+          <h3 className="font-mono text-xs font-bold uppercase tracking-wider text-ember-400">
+            + Upload New Score Screenshot
+          </h3>
           {msg   && <p className="rounded border border-green-600/30 bg-green-600/10 px-3 py-2 font-mono text-xs text-green-400">{msg}</p>}
           {error && <p className="rounded border border-red-600/30 bg-red-600/10 px-3 py-2 font-mono text-xs text-red-400">{error}</p>}
 
           <div>
-            <label className="label">Caption / Title (optional)</label>
+            <label className="label">Caption / Match Title (optional)</label>
             <input
               className="input"
               placeholder="e.g. Round 2 Results — Group A"
@@ -324,7 +480,7 @@ function LeaderboardPanel() {
           </div>
 
           <div>
-            <label className="label">Score Screenshot</label>
+            <label className="label">Score Screenshot Image</label>
             <input
               ref={fileRef}
               type="file"
@@ -336,7 +492,6 @@ function LeaderboardPanel() {
 
           {preview && (
             <div className="overflow-hidden rounded-lg border border-night-700">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
               <img src={preview} alt="Preview" className="max-h-72 w-full object-contain bg-night-900" />
               <p className="px-3 py-1.5 font-mono text-[10px] text-zinc-500">Preview</p>
             </div>
@@ -346,48 +501,321 @@ function LeaderboardPanel() {
             {busy ? "Uploading…" : "Upload to Leaderboard"}
           </button>
         </form>
+
+        {/* Existing Images Gallery with Full Edit / Delete controls */}
+        <div>
+          <h3 className="font-mono text-xs font-bold uppercase tracking-wider text-zinc-400 mb-3">
+            Published Screenshots ({images.length})
+          </h3>
+          {images.length === 0 ? (
+            <p className="py-6 text-center text-sm text-zinc-500 card">No score screenshots uploaded yet.</p>
+          ) : (
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              {images.map((img) => (
+                <div key={img.id} className="card overflow-hidden flex flex-col justify-between">
+                  <div>
+                    <a href={img.image_url} target="_blank" rel="noreferrer" className="block relative aspect-video bg-night-900 overflow-hidden">
+                      <img
+                        src={img.image_url}
+                        alt={img.title ?? "Score screenshot"}
+                        className="h-full w-full object-contain hover:scale-105 transition-transform"
+                      />
+                    </a>
+                    <div className="p-4">
+                      <p className="text-sm font-semibold text-white truncate">
+                        {img.title || <span className="text-zinc-500 italic">No title</span>}
+                      </p>
+                      <p className="font-mono text-[10px] text-zinc-500 mt-1">
+                        {new Date(img.created_at).toLocaleString("en-IN")}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2 p-4 pt-0 border-t border-night-800/60 mt-2">
+                    <button
+                      type="button"
+                      onClick={() => startEditImage(img)}
+                      className="flex-1 rounded border border-night-600 bg-night-800 py-1.5 font-mono text-xs font-bold text-zinc-200 hover:border-night-500 hover:text-white transition-colors"
+                    >
+                      ✏️ Edit
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => remove(img.id)}
+                      className="flex-1 rounded border border-red-600/30 bg-red-600/10 py-1.5 font-mono text-xs font-bold text-red-400 hover:bg-red-600/20 transition-colors"
+                    >
+                      🗑️ Delete
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
       </section>
 
-      {/* Existing images */}
-      <section>
-        <h2 className="font-display text-lg font-bold uppercase text-white">
-          Published Images ({images.length})
-        </h2>
-        {images.length === 0 ? (
-          <p className="mt-3 text-sm text-zinc-500">No images uploaded yet.</p>
-        ) : (
-          <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {images.map((img) => (
-              <div key={img.id} className="card overflow-hidden">
-                <a href={img.image_url} target="_blank" rel="noreferrer">
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    src={img.image_url}
-                    alt={img.title ?? "Leaderboard screenshot"}
-                    className="h-48 w-full object-contain bg-night-900"
+      {/* MODAL: EDIT IMAGE / CAPTION */}
+      {editingImg && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm">
+          <div className="relative w-full max-w-lg rounded-xl border border-night-700 bg-night-900 p-6 shadow-2xl space-y-4">
+            <div className="flex items-center justify-between border-b border-night-700 pb-3">
+              <h3 className="font-display font-bold uppercase text-white">Edit Score Screenshot</h3>
+              <button
+                onClick={() => setEditingImg(null)}
+                className="text-zinc-400 hover:text-white"
+              >
+                ✕
+              </button>
+            </div>
+
+            {editError && (
+              <p className="rounded border border-red-600/30 bg-red-600/10 px-3 py-2 font-mono text-xs text-red-400">
+                {editError}
+              </p>
+            )}
+
+            <form onSubmit={saveEditImage} className="space-y-4">
+              <div>
+                <label className="label">Caption / Title</label>
+                <input
+                  className="input"
+                  value={editTitle}
+                  onChange={(e) => setEditTitle(e.target.value)}
+                  placeholder="e.g. Finals Results"
+                  maxLength={120}
+                />
+              </div>
+
+              <div>
+                <label className="label">Replace Image (optional)</label>
+                <input
+                  ref={editFileRef}
+                  type="file"
+                  accept="image/*"
+                  onChange={onEditFileChange}
+                  className="block w-full cursor-pointer rounded border border-night-600 bg-night-800 px-3 py-2 text-sm text-zinc-300 file:mr-4 file:rounded file:border-0 file:bg-ember-600 file:px-4 file:py-1.5 file:text-xs file:font-bold file:uppercase file:text-white hover:file:bg-ember-500"
+                />
+              </div>
+
+              <div className="overflow-hidden rounded border border-night-700 bg-night-950 p-2">
+                <img
+                  src={editPreview || editingImg.image_url}
+                  alt="Preview"
+                  className="max-h-48 w-full object-contain"
+                />
+                <p className="mt-1 font-mono text-[10px] text-zinc-500 text-center">
+                  {editPreview ? "New replacement image selected" : "Current image"}
+                </p>
+              </div>
+
+              <div className="flex justify-end gap-2 pt-2 border-t border-night-800">
+                <button
+                  type="button"
+                  onClick={() => setEditingImg(null)}
+                  className="btn-ghost !py-2 !px-4 text-xs"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={editBusy}
+                  className="btn-primary !py-2 !px-5 text-xs"
+                >
+                  {editBusy ? "Saving…" : "Save Changes"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* SECTION 2: EDIT TEAM STANDINGS & SCORES */}
+      <section className="space-y-6">
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <div>
+            <h2 className="font-display text-lg font-bold uppercase text-white">
+              Team Standings &amp; Points Control
+            </h2>
+            <p className="mt-1 font-mono text-xs text-zinc-400">
+              Directly edit points, wins, losses, maps won/lost, or recalculate automatically from matches.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={recalculateAll}
+            disabled={standingsBusy}
+            className="rounded border border-night-600 bg-night-800 px-3 py-1.5 font-mono text-xs font-bold text-zinc-300 hover:border-night-500 hover:text-white transition-colors"
+          >
+            🔄 Recalculate from Matches
+          </button>
+        </div>
+
+        {standingsMsg && (
+          <p className="rounded border border-green-600/30 bg-green-600/10 px-4 py-2.5 font-mono text-xs text-green-400">
+            {standingsMsg}
+          </p>
+        )}
+
+        <div className="card overflow-x-auto">
+          <table className="w-full min-w-[700px] text-sm">
+            <thead>
+              <tr className="border-b border-night-700 bg-night-800 text-left font-mono text-[10px] font-bold uppercase tracking-wider text-zinc-400">
+                <th className="px-4 py-3">Team</th>
+                <th className="px-3 py-3 text-center">PTS</th>
+                <th className="px-3 py-3 text-center">W</th>
+                <th className="px-3 py-3 text-center">L</th>
+                <th className="px-3 py-3 text-center">D</th>
+                <th className="px-3 py-3 text-center">Maps Won</th>
+                <th className="px-3 py-3 text-center">Maps Lost</th>
+                <th className="px-4 py-3 text-right">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {standings.length === 0 ? (
+                <tr>
+                  <td colSpan={8} className="px-4 py-8 text-center text-zinc-500">
+                    No approved teams found.
+                  </td>
+                </tr>
+              ) : (
+                standings.map((t) => (
+                  <tr key={t.id} className="border-b border-night-800 font-mono last:border-0 hover:bg-night-850">
+                    <td className="px-4 py-3 font-bold text-white">
+                      <div className="flex items-center gap-2.5">
+                        <TeamMark name={t.team_name} logoUrl={t.logo_url} size={24} />
+                        <span>{t.team_name}</span>
+                      </div>
+                    </td>
+                    <td className="px-3 py-3 text-center font-bold text-ember-400 text-base">{t.points}</td>
+                    <td className="px-3 py-3 text-center text-green-400">{t.wins}</td>
+                    <td className="px-3 py-3 text-center text-red-400">{t.losses}</td>
+                    <td className="px-3 py-3 text-center text-zinc-400">{t.draws}</td>
+                    <td className="px-3 py-3 text-center text-zinc-300">{t.maps_won}</td>
+                    <td className="px-3 py-3 text-center text-zinc-400">{t.maps_lost}</td>
+                    <td className="px-4 py-3 text-right">
+                      <button
+                        type="button"
+                        onClick={() => startEditTeam(t)}
+                        className="rounded border border-night-600 bg-night-800 px-3 py-1 font-mono text-xs text-zinc-300 hover:border-night-500 hover:text-white transition-colors"
+                      >
+                        ✏️ Edit Stats
+                      </button>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      {/* MODAL: EDIT TEAM STANDINGS */}
+      {editingTeam && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm">
+          <div className="relative w-full max-w-md rounded-xl border border-night-700 bg-night-900 p-6 shadow-2xl space-y-4">
+            <div className="flex items-center justify-between border-b border-night-700 pb-3">
+              <div>
+                <h3 className="font-display font-bold uppercase text-white">Edit Team Stats</h3>
+                <p className="text-xs text-ember-400 font-mono">{editingTeam.team_name}</p>
+              </div>
+              <button
+                onClick={() => setEditingTeam(null)}
+                className="text-zinc-400 hover:text-white"
+              >
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={saveTeamStandings} className="space-y-4">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="label">Points (PTS)</label>
+                  <input
+                    type="number"
+                    min={0}
+                    className="input font-bold text-center"
+                    value={teamForm.points}
+                    onChange={(e) => setTeamForm((p) => ({ ...p, points: Number(e.target.value) }))}
+                    required
                   />
-                </a>
-                <div className="flex items-center justify-between px-4 py-3">
-                  <div>
-                    <p className="text-sm font-semibold text-white">
-                      {img.title || <span className="text-zinc-500 italic">No title</span>}
-                    </p>
-                    <p className="font-mono text-[10px] text-zinc-600">
-                      {new Date(img.created_at).toLocaleString("en-IN")}
-                    </p>
-                  </div>
-                  <button
-                    onClick={() => remove(img.id)}
-                    className="rounded border border-red-600/30 bg-red-600/10 px-3 py-1 font-mono text-xs text-red-400 hover:bg-red-600/20 transition-colors"
-                  >
-                    Remove
-                  </button>
+                </div>
+                <div>
+                  <label className="label">Wins (W)</label>
+                  <input
+                    type="number"
+                    min={0}
+                    className="input text-center"
+                    value={teamForm.wins}
+                    onChange={(e) => setTeamForm((p) => ({ ...p, wins: Number(e.target.value) }))}
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="label">Losses (L)</label>
+                  <input
+                    type="number"
+                    min={0}
+                    className="input text-center"
+                    value={teamForm.losses}
+                    onChange={(e) => setTeamForm((p) => ({ ...p, losses: Number(e.target.value) }))}
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="label">Draws (D)</label>
+                  <input
+                    type="number"
+                    min={0}
+                    className="input text-center"
+                    value={teamForm.draws}
+                    onChange={(e) => setTeamForm((p) => ({ ...p, draws: Number(e.target.value) }))}
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="label">Maps Won</label>
+                  <input
+                    type="number"
+                    min={0}
+                    className="input text-center"
+                    value={teamForm.maps_won}
+                    onChange={(e) => setTeamForm((p) => ({ ...p, maps_won: Number(e.target.value) }))}
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="label">Maps Lost</label>
+                  <input
+                    type="number"
+                    min={0}
+                    className="input text-center"
+                    value={teamForm.maps_lost}
+                    onChange={(e) => setTeamForm((p) => ({ ...p, maps_lost: Number(e.target.value) }))}
+                    required
+                  />
                 </div>
               </div>
-            ))}
+
+              <div className="flex justify-end gap-2 pt-3 border-t border-night-800">
+                <button
+                  type="button"
+                  onClick={() => setEditingTeam(null)}
+                  className="btn-ghost !py-2 !px-4 text-xs"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={standingsBusy}
+                  className="btn-primary !py-2 !px-5 text-xs"
+                >
+                  {standingsBusy ? "Saving…" : "Save Stats"}
+                </button>
+              </div>
+            </form>
           </div>
-        )}
-      </section>
+        </div>
+      )}
     </div>
   );
 }
