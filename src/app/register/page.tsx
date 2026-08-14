@@ -9,9 +9,10 @@ interface MemberRow {
   email: string;
   phone: string;
   im_number: string;
+  game_id: string;
 }
 
-const emptyMember = (): MemberRow => ({ member_name: "", email: "", phone: "", im_number: "" });
+const emptyMember = (): MemberRow => ({ member_name: "", email: "", phone: "", im_number: "", game_id: "" });
 
 /** Validates Sri Lanka mobile: +94 followed by 9 digits */
 function validatePhone(v: string): string {
@@ -40,6 +41,7 @@ function memberFromPlayer(p: any): MemberRow {
     email: p.email ?? "",
     phone: p.phone ?? "",
     im_number: p.im_number ?? "",
+    game_id: p.game_id ?? "",
   };
 }
 
@@ -89,6 +91,7 @@ export default function RegisterPage() {
   // ── Step 2 state ──
   const [teamName, setTeamName] = useState("");
   const [captainPhone, setCaptainPhone] = useState("");
+  const [captainGameId, setCaptainGameId] = useState("");
   const [logo, setLogo] = useState<File | null>(null);
   const [members, setMembers] = useState<MemberRow[]>([emptyMember(), emptyMember(), emptyMember(), emptyMember()]);
   const [agreed, setAgreed] = useState(false);
@@ -152,6 +155,7 @@ export default function RegisterPage() {
           setExistingTeamId(json.team.id);
           setTeamName(json.team.team_name ?? "");
           setCaptainPhone(json.team.phone ?? "");
+          setCaptainGameId(json.team.game_id ?? "");
           if (json.players?.length) {
             setMembers(json.players.map(memberFromPlayer));
           }
@@ -294,6 +298,7 @@ export default function RegisterPage() {
             setExistingTeamId(json.team.id);
             setTeamName(json.team.team_name ?? "");
             setCaptainPhone(json.team.phone ?? "");
+            setCaptainGameId(json.team.game_id ?? "");
             if (json.players?.length) setMembers(json.players.map(memberFromPlayer));
             setEditMode(true);
           }
@@ -333,7 +338,9 @@ export default function RegisterPage() {
     e.preventDefault();
     setError(null);
     if (!agreed) return setError("You must accept the rules and code of conduct");
+    if (!captainGameId.trim()) return setError("Leader's Gaming ID is required");
     if (members.some((m) => !m.member_name)) return setError("Every player needs a name");
+    if (members.some((m) => !m.game_id.trim())) return setError("Every player needs a Gaming ID");
     if (validatePhone(captainPhone)) return setError("Leader's mobile number is invalid");
     if (members.some((m) => validatePhone(m.phone))) return setError("One or more members have an invalid mobile number");
     if (members.some((m) => validateIm(m.im_number))) return setError("One or more members have an invalid IM number");
@@ -343,6 +350,7 @@ export default function RegisterPage() {
     const payload = {
       team_name: teamName,
       phone: captainPhone,
+      game_id: captainGameId.trim(),
       email: session?.user?.email ?? "",
       agreed: true,
       players: members.map((m) => ({
@@ -350,7 +358,7 @@ export default function RegisterPage() {
         email: m.email,
         phone: m.phone,
         im_number: m.im_number,
-        game_id: "",
+        game_id: m.game_id.trim(),
         is_substitute: false,
       })),
     };
@@ -371,7 +379,9 @@ export default function RegisterPage() {
     e.preventDefault();
     if (!existingTeamId) return;
     setError(null);
+    if (!captainGameId.trim()) return setError("Leader's Gaming ID is required");
     if (members.some((m) => !m.member_name)) return setError("Every player needs a name");
+    if (members.some((m) => !m.game_id.trim())) return setError("Every player needs a Gaming ID");
     if (validatePhone(captainPhone)) return setError("Leader's mobile number is invalid");
     if (members.some((m) => validatePhone(m.phone))) return setError("One or more members have an invalid mobile number");
     if (members.some((m) => validateIm(m.im_number))) return setError("One or more members have an invalid IM number");
@@ -381,12 +391,13 @@ export default function RegisterPage() {
     const body = {
       team_name: teamName,
       phone: captainPhone,
+      game_id: captainGameId.trim(),
       players: members.map((m) => ({
         player_name: m.member_name,
         email: m.email,
         phone: m.phone,
         im_number: m.im_number,
-        game_id: "",
+        game_id: m.game_id.trim(),
         is_substitute: false,
       })),
     };
@@ -688,8 +699,8 @@ export default function RegisterPage() {
         <ul className="card mt-4 list-inside list-disc p-4 text-sm text-zinc-400">
           <li>Only the team leader submits this form.</li>
           <li>Team name must be unique (max 30 characters).</li>
-          <li>Add all team members — name, email, mobile, and IM Number required.</li>
-          <li>Real names only.</li>
+          <li>Add all team members — name, email, mobile, IM Number, and Gaming ID required.</li>
+          <li>Real names only. Gaming ID must match your in-game profile.</li>
         </ul>
       )}
 
@@ -736,6 +747,16 @@ export default function RegisterPage() {
             {validatePhone(captainPhone) && (
               <p className="mt-1 font-mono text-[10px] text-red-400">{validatePhone(captainPhone)}</p>
             )}
+          </div>
+          <div>
+            <label className="label">Leader&apos;s Gaming ID</label>
+            <input
+              className="input"
+              required
+              placeholder="e.g. SniperKing#1234"
+              value={captainGameId}
+              onChange={(e) => setCaptainGameId(e.target.value)}
+            />
           </div>
           {!isEdit && (
             <div className="sm:col-span-2">
@@ -848,6 +869,18 @@ export default function RegisterPage() {
                     {validateIm(m.im_number) && (
                       <p className="mt-1 font-mono text-[10px] text-red-400">{validateIm(m.im_number)}</p>
                     )}
+                  </div>
+                  <div>
+                    <label className="label text-[11px]">Gaming ID</label>
+                    <input
+                      className="input"
+                      placeholder="e.g. SniperKing#1234"
+                      required
+                      value={m.game_id}
+                      onChange={(e) =>
+                        setMembers(members.map((x, j) => (j === i ? { ...x, game_id: e.target.value } : x)))
+                      }
+                    />
                   </div>
                 </div>
               </div>
