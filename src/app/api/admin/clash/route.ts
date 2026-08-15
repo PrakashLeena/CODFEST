@@ -40,7 +40,7 @@ export async function GET() {
   const [{ data: teams }, { data: matches }, settings] = await Promise.all([
     db()
       .from("teams")
-      .select("id, team_name, logo_url, status, points, wins, losses, draws, maps_won, maps_lost, players(id, player_name, game_id)")
+      .select("id, team_name, logo_url, status, points, wins, losses, draws, maps_won, maps_lost, captain_id, captain:users!teams_captain_id_fkey(name), players(id, player_name, game_id)")
       .eq("status", "approved")
       .order("team_name", { ascending: true }),
     db()
@@ -51,19 +51,51 @@ export async function GET() {
   ]);
 
   const teamCategories: Record<string, "boys" | "girls"> = settings.team_categories ?? {};
+  const boysTeamOrders: Record<string, number> = settings.boys_team_orders ?? {};
+  const girlsTeamOrders: Record<string, number> = settings.girls_team_orders ?? {};
   const teamOrders: Record<string, number> = settings.team_orders ?? {};
 
-  const enrichedTeams = (teams ?? []).map((t) => ({
-    ...t,
-    category: teamCategories[t.id] ?? "boys",
-    display_order: typeof teamOrders[t.id] === "number" ? teamOrders[t.id] : null,
-  }));
+  const enrichedTeams = (teams ?? []).map((t: any) => {
+    const category: "boys" | "girls" = teamCategories[t.id] ?? "boys";
+    const captainName = (t.captain as any)?.name;
+    const roster: { id: string; player_name: string; game_id?: string }[] = [];
+
+    if (captainName) {
+      roster.push({ id: t.captain_id || "captain", player_name: `${captainName} (Leader)`, game_id: "" });
+    }
+    (t.players ?? []).forEach((p: any) => {
+      roster.push({ id: p.id, player_name: p.player_name, game_id: p.game_id });
+    });
+    while (roster.length < 5) {
+      roster.push({ id: `p-${roster.length + 1}`, player_name: `Player ${roster.length + 1}`, game_id: "" });
+    }
+
+    let displayOrder: number | null = null;
+    if (category === "boys" && typeof boysTeamOrders[t.id] === "number") {
+      displayOrder = boysTeamOrders[t.id];
+    } else if (category === "girls" && typeof girlsTeamOrders[t.id] === "number") {
+      displayOrder = girlsTeamOrders[t.id];
+    } else if (typeof teamOrders[t.id] === "number") {
+      displayOrder = teamOrders[t.id];
+    }
+
+    return {
+      ...t,
+      players: roster,
+      category,
+      display_order: displayOrder,
+      boys_order: typeof boysTeamOrders[t.id] === "number" ? boysTeamOrders[t.id] : null,
+      girls_order: typeof girlsTeamOrders[t.id] === "number" ? girlsTeamOrders[t.id] : null,
+    };
+  });
 
   return NextResponse.json({
     teams: enrichedTeams,
     matches: matches ?? [],
     team_categories: teamCategories,
     team_orders: teamOrders,
+    boys_team_orders: boysTeamOrders,
+    girls_team_orders: girlsTeamOrders,
   });
 }
 
@@ -285,15 +317,22 @@ export async function PATCH(req: Request) {
     maps_lost,
     category,
     display_order,
+    division,
     team_categories,
     team_orders,
+    boys_team_orders,
+    girls_team_orders,
     order_list,
   } = body ?? {};
 
   const settings = await getSystemSettings();
   let settingsChanged = false;
   const currentCategories: Record<string, "boys" | "girls"> = { ...(settings.team_categories ?? {}) };
+  const currentBoysOrders: Record<string, number> = { ...(settings.boys_team_orders ?? {}) };
+  const currentGirlsOrders: Record<string, number> = { ...(settings.girls_team_orders ?? {}) };
   const currentOrders: Record<string, number> = { ...(settings.team_orders ?? {}) };
+
+  const targetDivision: "boys" | "girls" | "all" | undefined = division;
 
   // 1. Batch category updates
   if (team_categories && typeof team_categories === "object") {
@@ -305,27 +344,58 @@ export async function PATCH(req: Request) {
     });
   }
 
-  // 2. Batch order list updates
+  // 2. Batch division-specific orders directly provided
+  if (boys_team_orders && typeof boys_team_orders === "object") {
+    Object.entries(boys_team_orders).forEach(([tId, ord]) => {
+      if (typeof ord === "number") {
+        currentBoysOrders[tId] = ord;
+        settingsChanged = true;
+      }
+    });
+  }
+
+  if (girls_team_orders && typeof girls_team_orders === "object") {
+    Object.entries(girls_team_orders).forEach(([tId, ord]) => {
+      if (typeof ord === "number") {
+        currentGirlsOrders[tId] = ord;
+        settingsChanged = true;
+      }
+    });
+  }
+
+  // 3. Batch order list updates
   if (Array.isArray(order_list)) {
     order_list.forEach((tId, idx) => {
       if (typeof tId === "string") {
+        const teamCat = currentCategories[tId] ?? "boys";
+        if (targetDivision === "girls" || teamCat === "girls") {
+          currentGirlsOrders[tId] = idx + 1;
+        } else if (targetDivision === "boys" || teamCat === "boys") {
+          currentBoysOrders[tId] = idx + 1;
+        }
         currentOrders[tId] = idx + 1;
         settingsChanged = true;
       }
     });
   }
 
-  // 3. Batch team_orders map
+  // 4. Batch team_orders map
   if (team_orders && typeof team_orders === "object") {
     Object.entries(team_orders).forEach(([tId, ord]) => {
       if (typeof ord === "number") {
+        const teamCat = currentCategories[tId] ?? "boys";
+        if (targetDivision === "girls" || teamCat === "girls") {
+          currentGirlsOrders[tId] = ord;
+        } else if (targetDivision === "boys" || teamCat === "boys") {
+          currentBoysOrders[tId] = ord;
+        }
         currentOrders[tId] = ord;
         settingsChanged = true;
       }
     });
   }
 
-  // 4. Single team updates
+  // 5. Single team updates
   if (team_id) {
     if (category === "boys" || category === "girls") {
       currentCategories[team_id] = category;
@@ -333,6 +403,12 @@ export async function PATCH(req: Request) {
     }
 
     if (typeof display_order === "number") {
+      const effectiveCat = category || currentCategories[team_id] || "boys";
+      if (targetDivision === "girls" || effectiveCat === "girls") {
+        currentGirlsOrders[team_id] = display_order;
+      } else if (targetDivision === "boys" || effectiveCat === "boys") {
+        currentBoysOrders[team_id] = display_order;
+      }
       currentOrders[team_id] = display_order;
       settingsChanged = true;
     }
@@ -353,6 +429,8 @@ export async function PATCH(req: Request) {
   if (settingsChanged) {
     await updateSystemSettings({
       team_categories: currentCategories,
+      boys_team_orders: currentBoysOrders,
+      girls_team_orders: currentGirlsOrders,
       team_orders: currentOrders,
     });
   }
@@ -366,6 +444,7 @@ export async function PATCH(req: Request) {
     losses,
     category,
     display_order,
+    division: targetDivision,
     settingsChanged,
   });
 
@@ -373,6 +452,8 @@ export async function PATCH(req: Request) {
     ok: true,
     leaderboard,
     team_categories: currentCategories,
+    boys_team_orders: currentBoysOrders,
+    girls_team_orders: currentGirlsOrders,
     team_orders: currentOrders,
   });
 }

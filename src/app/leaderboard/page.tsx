@@ -62,6 +62,8 @@ const FIVE_MINUTES_MS = 5 * 60 * 1000; // 5 minutes auto-refresh
 
 export default function LeaderboardPage() {
   const [rows, setRows] = useState<LeaderboardRow[]>([]);
+  const [boysRows, setBoysRows] = useState<LeaderboardRow[]>([]);
+  const [girlsRows, setGirlsRows] = useState<LeaderboardRow[]>([]);
   const [clashes, setClashes] = useState<Match[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -87,6 +89,8 @@ export default function LeaderboardPage() {
       });
       const json = await res.json();
       if (json.leaderboard) setRows(json.leaderboard);
+      if (json.boys_leaderboard) setBoysRows(json.boys_leaderboard);
+      if (json.girls_leaderboard) setGirlsRows(json.girls_leaderboard);
       if (json.clashes) setClashes(json.clashes);
       setLastUpdated(new Date());
     } catch {
@@ -111,15 +115,22 @@ export default function LeaderboardPage() {
     }
   );
 
-  const boysCount = rows.filter((r) => r.category === "boys").length;
-  const girlsCount = rows.filter((r) => r.category === "girls").length;
+  const boysCount = (boysRows.length > 0 ? boysRows : rows.filter((r) => r.category === "boys")).length;
+  const girlsCount = (girlsRows.length > 0 ? girlsRows : rows.filter((r) => r.category === "girls")).length;
 
   const displayRows = useMemo(() => {
-    if (division === "all") return rows;
-    return rows
-      .filter((r) => (r.category ?? "boys") === division)
-      .map((r, i) => ({ ...r, rank: i + 1 }));
-  }, [rows, division]);
+    if (division === "boys") {
+      return boysRows.length > 0
+        ? boysRows
+        : rows.filter((r) => (r.category ?? "boys") === "boys").map((r, i) => ({ ...r, rank: i + 1 }));
+    }
+    if (division === "girls") {
+      return girlsRows.length > 0
+        ? girlsRows
+        : rows.filter((r) => r.category === "girls").map((r, i) => ({ ...r, rank: i + 1 }));
+    }
+    return rows;
+  }, [rows, boysRows, girlsRows, division]);
 
   const displayClashes = useMemo(() => {
     if (division === "all") return clashes;
@@ -302,8 +313,25 @@ export default function LeaderboardPage() {
 
                 const sub1 = current.submission_team1 as any;
                 const sub2 = current.submission_team2 as any;
-                const pList1: PlayerStatRow[] = sub1?.players ?? [];
-                const pList2: PlayerStatRow[] = sub2?.players ?? [];
+                
+                const padToFive = (list?: PlayerStatRow[]): PlayerStatRow[] => {
+                  if (!list || list.length === 0) return [];
+                  const res = [...list];
+                  while (res.length < 5) {
+                    res.push({
+                      name: `Member ${res.length + 1}`,
+                      score: 0,
+                      kills: 0,
+                      assists: 0,
+                      deaths: 0,
+                      ping: 35,
+                    });
+                  }
+                  return res;
+                };
+
+                const pList1: PlayerStatRow[] = padToFive(sub1?.players);
+                const pList2: PlayerStatRow[] = padToFive(sub2?.players);
 
                 const score1 = current.final_score1 ?? sub1?.score_own ?? 0;
                 const score2 = current.final_score2 ?? sub2?.score_own ?? 0;

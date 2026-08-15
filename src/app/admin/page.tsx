@@ -496,20 +496,37 @@ function LeaderboardControlPanel() {
     loadData();
   }, [loadData]);
 
+  const padToFiveAdmin = (list: PlayerStatRow[]): PlayerStatRow[] => {
+    const res = [...list];
+    while (res.length < 5) {
+      res.push({
+        name: `Player ${res.length + 1}`,
+        score: 0,
+        kills: 0,
+        assists: 0,
+        deaths: 0,
+        ping: 35,
+      });
+    }
+    return res;
+  };
+
   // Handle team 1 change -> auto load logo & roster
   const handleTeam1Select = (id: string) => {
     setTeam1Id(id);
     const found = teams.find((t) => t.id === id);
     if (found?.players && found.players.length > 0) {
       setTeam1Players(
-        found.players.map((p) => ({
-          name: p.player_name,
-          score: 0,
-          kills: 0,
-          assists: 0,
-          deaths: 0,
-          ping: 35,
-        }))
+        padToFiveAdmin(
+          found.players.map((p) => ({
+            name: p.player_name,
+            score: 0,
+            kills: 0,
+            assists: 0,
+            deaths: 0,
+            ping: 35,
+          }))
+        )
       );
     }
   };
@@ -520,14 +537,16 @@ function LeaderboardControlPanel() {
     const found = teams.find((t) => t.id === id);
     if (found?.players && found.players.length > 0) {
       setTeam2Players(
-        found.players.map((p) => ({
-          name: p.player_name,
-          score: 0,
-          kills: 0,
-          assists: 0,
-          deaths: 0,
-          ping: 35,
-        }))
+        padToFiveAdmin(
+          found.players.map((p) => ({
+            name: p.player_name,
+            score: 0,
+            kills: 0,
+            assists: 0,
+            deaths: 0,
+            ping: 35,
+          }))
+        )
       );
     }
   };
@@ -544,22 +563,22 @@ function LeaderboardControlPanel() {
     // Load team 1 player scorecards if saved in submission
     const sub1 = m.submission_team1 as any;
     if (sub1?.players && Array.isArray(sub1.players) && sub1.players.length > 0) {
-      setTeam1Players(sub1.players);
+      setTeam1Players(padToFiveAdmin(sub1.players));
     } else {
       const found = teams.find((t) => t.id === m.team1_id);
       if (found?.players?.length) {
-        setTeam1Players(found.players.map((p) => ({ name: p.player_name, score: 0, kills: 0, assists: 0, deaths: 0, ping: 35 })));
+        setTeam1Players(padToFiveAdmin(found.players.map((p) => ({ name: p.player_name, score: 0, kills: 0, assists: 0, deaths: 0, ping: 35 }))));
       }
     }
 
     // Load team 2 player scorecards if saved in submission
     const sub2 = m.submission_team2 as any;
     if (sub2?.players && Array.isArray(sub2.players) && sub2.players.length > 0) {
-      setTeam2Players(sub2.players);
+      setTeam2Players(padToFiveAdmin(sub2.players));
     } else {
       const found = teams.find((t) => t.id === m.team2_id);
       if (found?.players?.length) {
-        setTeam2Players(found.players.map((p) => ({ name: p.player_name, score: 0, kills: 0, assists: 0, deaths: 0, ping: 35 })));
+        setTeam2Players(padToFiveAdmin(found.players.map((p) => ({ name: p.player_name, score: 0, kills: 0, assists: 0, deaths: 0, ping: 35 }))));
       }
     }
 
@@ -823,7 +842,7 @@ function LeaderboardControlPanel() {
       await fetch("/api/admin/clash", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ team_orders: newOrders }),
+        body: JSON.stringify({ division: adminDivision, team_orders: newOrders }),
       });
       loadData();
     } catch {
@@ -859,7 +878,7 @@ function LeaderboardControlPanel() {
       await fetch("/api/admin/clash", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ team_id: teamId, display_order: pos }),
+        body: JSON.stringify({ division: adminDivision, team_id: teamId, display_order: pos }),
       });
       loadData();
     } catch {

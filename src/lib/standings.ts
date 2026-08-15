@@ -111,17 +111,29 @@ export async function getLeaderboard() {
   ]);
 
   const teamCategories: Record<string, "boys" | "girls"> = settings.team_categories ?? {};
-  const teamOrders: Record<string, number> = settings.team_orders ?? {};
+  const boysOrders: Record<string, number> = settings.boys_team_orders ?? {};
+  const girlsOrders: Record<string, number> = settings.girls_team_orders ?? {};
+  const globalOrders: Record<string, number> = settings.team_orders ?? {};
 
   const rawList = (data ?? []).map((t) => {
     const category: "boys" | "girls" = teamCategories[t.id] ?? "boys";
-    const customOrder: number | null = typeof teamOrders[t.id] === "number" ? teamOrders[t.id] : null;
+    let customOrder: number | null = null;
+    if (category === "boys" && typeof boysOrders[t.id] === "number") {
+      customOrder = boysOrders[t.id];
+    } else if (category === "girls" && typeof girlsOrders[t.id] === "number") {
+      customOrder = girlsOrders[t.id];
+    } else if (typeof globalOrders[t.id] === "number") {
+      customOrder = globalOrders[t.id];
+    }
+
     const played = t.wins + t.losses + t.draws;
     const win_rate = played ? Math.round((t.wins / played) * 100) : 0;
     return {
       ...t,
       category,
       custom_order: customOrder,
+      boys_order: typeof boysOrders[t.id] === "number" ? boysOrders[t.id] : null,
+      girls_order: typeof girlsOrders[t.id] === "number" ? girlsOrders[t.id] : null,
       played,
       win_rate,
     };
@@ -152,14 +164,27 @@ export async function getLeaderboard() {
 
 export async function getLeaderboardSplits() {
   const fullLeaderboard = await getLeaderboard();
+  const settings = await getSystemSettings();
+  const boysOrders: Record<string, number> = settings.boys_team_orders ?? {};
+  const girlsOrders: Record<string, number> = settings.girls_team_orders ?? {};
 
-  const boysTeams = fullLeaderboard
-    .filter((t) => t.category === "boys")
-    .map((t, idx) => ({ ...t, rank: idx + 1 }));
+  const sortDivision = (list: typeof fullLeaderboard, divisionOrders: Record<string, number>) => {
+    return [...list].sort((a, b) => {
+      const ordA = typeof divisionOrders[a.id] === "number" ? divisionOrders[a.id] : a.custom_order;
+      const ordB = typeof divisionOrders[b.id] === "number" ? divisionOrders[b.id] : b.custom_order;
+      if (ordA !== null && ordB !== null) return ordA - ordB;
+      if (ordA !== null) return -1;
+      if (ordB !== null) return 1;
+      return (
+        b.points - a.points ||
+        (b.maps_won - b.maps_lost) - (a.maps_won - a.maps_lost) ||
+        b.wins - a.wins
+      );
+    }).map((t, idx) => ({ ...t, rank: idx + 1 }));
+  };
 
-  const girlsTeams = fullLeaderboard
-    .filter((t) => t.category === "girls")
-    .map((t, idx) => ({ ...t, rank: idx + 1 }));
+  const boysTeams = sortDivision(fullLeaderboard.filter((t) => t.category === "boys"), boysOrders);
+  const girlsTeams = sortDivision(fullLeaderboard.filter((t) => t.category === "girls"), girlsOrders);
 
   return {
     leaderboard: fullLeaderboard,
