@@ -1627,21 +1627,13 @@ function LeaderboardControlPanel() {
       if (ordA !== null) return -1;
       if (ordB !== null) return 1;
 
-      // When viewing Boys or Girls division, sort strictly by wins and losses (not points)
-      if (adminDivision === "boys" || adminDivision === "girls") {
-        return (
-          (b.wins || 0) - (a.wins || 0) ||
-          (a.losses || 0) - (b.losses || 0) ||
-          ((b.maps_won || 0) - (b.maps_lost || 0)) - ((a.maps_won || 0) - (a.maps_lost || 0)) ||
-          (b.maps_won || 0) - (a.maps_won || 0) ||
-          (a.team_name || "").localeCompare(b.team_name || "")
-        );
-      }
-
+      // All divisions rank strictly by wins, losses, and matches played (not points)
       return (
-        b.points - a.points ||
-        (b.maps_won - b.maps_lost) - (a.maps_won - a.maps_lost) ||
-        b.wins - a.wins ||
+        (b.wins || 0) - (a.wins || 0) ||
+        (a.losses || 0) - (b.losses || 0) ||
+        ((b.wins || 0) + (b.losses || 0) + (b.draws || 0)) - ((a.wins || 0) + (a.losses || 0) + (a.draws || 0)) ||
+        ((b.maps_won || 0) - (b.maps_lost || 0)) - ((a.maps_won || 0) - (a.maps_lost || 0)) ||
+        (b.maps_won || 0) - (a.maps_won || 0) ||
         (a.team_name || "").localeCompare(b.team_name || "")
       );
     });

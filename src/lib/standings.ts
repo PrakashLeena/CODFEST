@@ -132,20 +132,38 @@ export async function updateSystemSettings(newValues: Record<string, any>) {
   }
 }
 
-/** Helper comparator that automatically sorts teams strictly based on player score/points and performance */
+/**
+ * Comparator that sorts all teams by match record:
+ * 1. Wins (descending)
+ * 2. Losses (ascending — fewer losses ranked higher)
+ * 3. Matches Played (descending — more experience ranked higher on equal W/L)
+ * 4. Map differential (descending)
+ * 5. Maps won (descending)
+ * 6. Alphabetical fallback
+ * Points are NOT used for ordering.
+ */
 function compareTeamsByScore(a: any, b: any) {
-  // 1. Total Points / Cumulative Player Score (descending)
-  if (b.points !== a.points) return b.points - a.points;
-  // 2. Maps/Score Won (descending)
-  if (b.maps_won !== a.maps_won) return b.maps_won - a.maps_won;
-  // 3. Wins count (descending)
-  if (b.wins !== a.wins) return b.wins - a.wins;
-  // 4. Map differential
-  const diffA = a.maps_won - a.maps_lost;
-  const diffB = b.maps_won - b.maps_lost;
+  const winsA = Number(a.wins) || 0;
+  const winsB = Number(b.wins) || 0;
+  if (winsB !== winsA) return winsB - winsA;
+
+  const lossesA = Number(a.losses) || 0;
+  const lossesB = Number(b.losses) || 0;
+  if (lossesA !== lossesB) return lossesA - lossesB;
+
+  const playedA = Number(a.played) || 0;
+  const playedB = Number(b.played) || 0;
+  if (playedB !== playedA) return playedB - playedA;
+
+  const diffA = (Number(a.maps_won) || 0) - (Number(a.maps_lost) || 0);
+  const diffB = (Number(b.maps_won) || 0) - (Number(b.maps_lost) || 0);
   if (diffB !== diffA) return diffB - diffA;
-  // 5. Alphabetical fallback
-  return a.team_name.localeCompare(b.team_name);
+
+  const mapsWonA = Number(a.maps_won) || 0;
+  const mapsWonB = Number(b.maps_won) || 0;
+  if (mapsWonB !== mapsWonA) return mapsWonB - mapsWonA;
+
+  return (a.team_name || "").localeCompare(b.team_name || "");
 }
 
 /**
@@ -407,8 +425,10 @@ export async function getLeaderboardSplits() {
     };
   });
 
+  // Overall leaderboard also ranks strictly by wins, losses, and matches played (not points)
   const overallLeaderboard = [...allTeams]
-    .sort(compareTeamsByScore)
+    .map((t) => ({ ...t, display_order: t.display_order }))
+    .sort(compareTeamsByRecord)
     .map((t, idx) => ({ ...t, rank: idx + 1 }));
 
   // Automatically rank Boys division strictly by WINS and LOSSES (not points)
