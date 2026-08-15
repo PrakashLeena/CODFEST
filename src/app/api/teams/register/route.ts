@@ -19,6 +19,7 @@ const schema = z.object({
   team_name: z.string().min(2).max(30),
   phone: z.string().min(6).max(20),
   email: z.string().email(),
+  captain_name: z.string().min(2).max(60).optional(),
   discord: z.string().max(60).optional().default(""),
   whatsapp: z.string().max(20).optional().default(""),
   players: z.array(playerSchema).min(1).max(5),
@@ -60,6 +61,10 @@ export async function POST(req: Request) {
   }
 
   const d = parsed.data;
+  if (d.captain_name) {
+    await db().from("users").update({ name: d.captain_name.trim() }).eq("id", user.id);
+  }
+
   const { data: team, error } = await db()
     .from("teams")
     .insert({

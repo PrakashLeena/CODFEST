@@ -779,8 +779,20 @@ export default function LeaderboardPage() {
         </div>
       ) : (
         <div className="rounded-2xl sm:rounded-3xl border border-night-700/60 bg-gradient-to-b from-night-850/80 to-night-900/90 p-6 sm:p-10 text-center shadow-2xl backdrop-blur-md">
-          <div className="mx-auto mb-3 sm:mb-4 flex h-12 w-12 sm:h-16 sm:w-16 items-center justify-center rounded-xl sm:rounded-2xl border border-ember-500/30 bg-ember-600/10 text-2xl sm:text-3xl text-ember-400 shadow-[0_0_25px_rgba(249,115,22,0.2)]">
-            🎯
+          <div className="mx-auto mb-3 sm:mb-4 flex h-12 w-12 sm:h-16 sm:w-16 items-center justify-center rounded-xl sm:rounded-2xl border border-ember-500/30 bg-ember-600/10 text-ember-400 shadow-[0_0_25px_rgba(249,115,22,0.2)]">
+            <svg
+              className="h-6 w-6 sm:h-8 sm:w-8"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"
+              />
+            </svg>
           </div>
           <h2 className="font-display text-xl sm:text-2xl font-black uppercase tracking-wider text-white">
             Standings Awaiting Match Scores

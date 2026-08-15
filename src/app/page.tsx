@@ -25,6 +25,9 @@ export default async function HomePage() {
     supa.from("announcements").select("*").neq("title", "__SYSTEM_SETTINGS__").order("created_at", { ascending: false }).limit(3),
   ]);
 
+  const teamCount = teams.count ?? 0;
+  const totalPlayers = teamCount * 5;
+
   return (
     <>
       <Hero
@@ -32,7 +35,7 @@ export default async function HomePage() {
         nextMatchTime={nextMatch.data?.scheduled_time ?? null}
         registrationOpen={process.env.NEXT_PUBLIC_REGISTRATION_OPEN !== "false"}
         prizePool={process.env.NEXT_PUBLIC_PRIZE_POOL ?? "TBA"}
-        stats={{ teams: teams.count ?? 0, players: players.count ?? 0, played: played.count ?? 0 }}
+        stats={{ teams: teamCount, players: totalPlayers, played: played.count ?? 0 }}
       />
 
       <AnimatedHomeContent

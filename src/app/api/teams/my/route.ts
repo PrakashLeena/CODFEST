@@ -15,7 +15,18 @@ export async function GET() {
     .eq("captain_id", user.id)
     .maybeSingle();
 
-  if (!team) return NextResponse.json({ team: null, players: [] });
+  const { data: dbUser } = await db()
+    .from("users")
+    .select("name, email")
+    .eq("id", user.id)
+    .maybeSingle();
+
+  const captainUser = {
+    name: dbUser?.name ?? user.name ?? "",
+    email: dbUser?.email ?? user.email ?? "",
+  };
+
+  if (!team) return NextResponse.json({ team: null, players: [], user: captainUser });
 
   const { data: players } = await db()
     .from("players")
@@ -23,5 +34,5 @@ export async function GET() {
     .eq("team_id", team.id)
     .order("is_substitute");
 
-  return NextResponse.json({ team, players: players ?? [] });
+  return NextResponse.json({ team, players: players ?? [], user: captainUser });
 }

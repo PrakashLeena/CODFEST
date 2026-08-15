@@ -151,6 +151,11 @@ export default function RegisterPage() {
     fetch("/api/teams/my")
       .then((r) => r.json())
       .then((json) => {
+        if (json.user?.name && json.user.name !== "leader") {
+          setLeaderName(json.user.name);
+        } else if (session.user?.name && session.user.name !== "leader") {
+          setLeaderName(session.user.name);
+        }
         if (json.team) {
           setExistingTeamId(json.team.id);
           setTeamName(json.team.team_name ?? "");
@@ -280,13 +285,8 @@ export default function RegisterPage() {
         return;
       }
       // ⏰ Stamp verification time — session is valid for 1 hour from now.
-      // sessionStorage persists across page refreshes (same tab) so the
-      // leader can refresh without being asked for OTP again within 1 hour.
       sessionStorage.setItem("captainVerifiedAt", Date.now().toString());
-      // Clear leader identity fields (never persisted across refreshes)
       setEmailInput("");
-      setLeaderName("");
-      setLeaderIm("");
       setPendingVerify(null);
       setStep1("email");     // reset step state
       setSessionChecked(true); // skip the mount-time check (already done)
@@ -294,6 +294,9 @@ export default function RegisterPage() {
       fetch("/api/teams/my")
         .then((r) => r.json())
         .then((json) => {
+          if (json.user?.name && json.user.name !== "leader") {
+            setLeaderName(json.user.name);
+          }
           if (json.team) {
             setExistingTeamId(json.team.id);
             setTeamName(json.team.team_name ?? "");
@@ -338,10 +341,12 @@ export default function RegisterPage() {
     e.preventDefault();
     setError(null);
     if (!agreed) return setError("You must accept the rules and code of conduct");
+    if (!leaderName.trim()) return setError("Leader's full name is required");
+    if (leaderIm.trim() && validateIm(leaderIm)) return setError("Leader's IM number is invalid");
+    if (validatePhone(captainPhone)) return setError("Leader's mobile number is invalid");
     if (!captainGameId.trim()) return setError("Leader's Gaming ID is required");
     if (members.some((m) => !m.member_name)) return setError("Every player needs a name");
     if (members.some((m) => !m.game_id.trim())) return setError("Every player needs a Gaming ID");
-    if (validatePhone(captainPhone)) return setError("Leader's mobile number is invalid");
     if (members.some((m) => validatePhone(m.phone))) return setError("One or more members have an invalid mobile number");
     if (members.some((m) => validateIm(m.im_number))) return setError("One or more members have an invalid IM number");
     if (members.some((m) => validateEmail(m.email))) return setError("One or more members have an invalid email address");
@@ -351,7 +356,8 @@ export default function RegisterPage() {
       team_name: teamName,
       phone: captainPhone,
       game_id: captainGameId.trim(),
-      email: session?.user?.email ?? "",
+      captain_name: leaderName.trim(),
+      email: session?.user?.email ?? emailInput.trim(),
       agreed: true,
       players: members.map((m) => ({
         player_name: m.member_name,
@@ -379,10 +385,12 @@ export default function RegisterPage() {
     e.preventDefault();
     if (!existingTeamId) return;
     setError(null);
+    if (!leaderName.trim()) return setError("Leader's full name is required");
+    if (leaderIm.trim() && validateIm(leaderIm)) return setError("Leader's IM number is invalid");
+    if (validatePhone(captainPhone)) return setError("Leader's mobile number is invalid");
     if (!captainGameId.trim()) return setError("Leader's Gaming ID is required");
     if (members.some((m) => !m.member_name)) return setError("Every player needs a name");
     if (members.some((m) => !m.game_id.trim())) return setError("Every player needs a Gaming ID");
-    if (validatePhone(captainPhone)) return setError("Leader's mobile number is invalid");
     if (members.some((m) => validatePhone(m.phone))) return setError("One or more members have an invalid mobile number");
     if (members.some((m) => validateIm(m.im_number))) return setError("One or more members have an invalid IM number");
     if (members.some((m) => validateEmail(m.email))) return setError("One or more members have an invalid email address");
@@ -392,6 +400,7 @@ export default function RegisterPage() {
       team_name: teamName,
       phone: captainPhone,
       game_id: captainGameId.trim(),
+      captain_name: leaderName.trim(),
       players: members.map((m) => ({
         player_name: m.member_name,
         email: m.email,
@@ -711,64 +720,135 @@ export default function RegisterPage() {
           </p>
         )}
 
-        {/* ── Team basics ── */}
-        <div className="grid gap-4 sm:grid-cols-2">
-          <div>
-            <label className="label">Team name</label>
-            <input
-              className="input"
-              required
-              maxLength={30}
-              placeholder="SQUAD_NAME"
-              value={teamName}
-              onChange={(e) => setTeamName(e.target.value)}
-            />
+        {/* ── Leader details ── */}
+        <div className="rounded border border-night-700/80 bg-night-900/60 p-4">
+          <div className="mb-3 flex items-center justify-between border-b border-night-700/50 pb-2">
+            <span className="font-mono text-xs uppercase tracking-widest text-ember-400">
+              // TEAM LEADER DETAILS
+            </span>
+            <span className="rounded border border-ember-500/30 bg-ember-500/10 px-2 py-0.5 font-mono text-[10px] text-ember-300">
+              Leader
+            </span>
           </div>
-          <div>
-            <label className="label">Leader&apos;s mobile number</label>
-            <input
-              className={`input ${
-                validatePhone(captainPhone) ? "border-red-500/70 focus:border-red-500" : ""
-              }`}
-              required
-              maxLength={13}
-              placeholder="+94 XXX XXX XXX"
-              value={captainPhone}
-              onChange={(e) => {
-                let raw = e.target.value;
-                if (!raw.startsWith("+94")) {
-                  raw = "+94" + raw.replace(/^\+?9?4?/, "").replace(/\D/g, "");
-                }
-                const prefix = "+94";
-                const digits = raw.slice(prefix.length).replace(/\D/g, "").slice(0, 9);
-                setCaptainPhone(prefix + digits);
-              }}
-            />
-            {validatePhone(captainPhone) && (
-              <p className="mt-1 font-mono text-[10px] text-red-400">{validatePhone(captainPhone)}</p>
-            )}
-          </div>
-          <div>
-            <label className="label">Leader&apos;s Gaming ID</label>
-            <input
-              className="input"
-              required
-              placeholder="e.g. SniperKing#1234"
-              value={captainGameId}
-              onChange={(e) => setCaptainGameId(e.target.value)}
-            />
-          </div>
-          {!isEdit && (
-            <div className="sm:col-span-2">
-              <label className="label">Team logo (optional, max 4 MB)</label>
+
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div>
+              <div className="flex items-center justify-between">
+                <label className="label">Leader&apos;s email</label>
+                <span className="font-mono text-[10px] text-zinc-500">🔒 Locked</span>
+              </div>
+              <input
+                className="input cursor-not-allowed border-night-700 bg-night-950/60 text-zinc-400 opacity-75"
+                type="email"
+                readOnly
+                disabled
+                value={session?.user?.email || emailInput}
+              />
+              <p className="mt-1 font-mono text-[10px] text-zinc-500">
+                Email address is verified and cannot be changed.
+              </p>
+            </div>
+
+            <div>
+              <label className="label">Leader&apos;s full name</label>
               <input
                 className="input"
-                type="file"
-                accept="image/*"
-                onChange={(e) => setLogo(e.target.files?.[0] ?? null)}
+                required
+                minLength={2}
+                placeholder="Real name"
+                value={leaderName}
+                onChange={(e) => setLeaderName(e.target.value)}
               />
             </div>
-          )}
+
+            <div>
+              <label className="label">Leader&apos;s IM Number</label>
+              <input
+                className={`input ${
+                  leaderIm && validateIm(leaderIm) ? "border-red-500/70 focus:border-red-500" : ""
+                }`}
+                placeholder="IM/0000/000"
+                maxLength={11}
+                pattern="^IM\/\d{4}\/\d{3}$"
+                title="Format: IM/0000/000 (e.g. IM/2024/123)"
+                value={leaderIm}
+                onChange={(e) => setLeaderIm(e.target.value)}
+              />
+              {leaderIm && validateIm(leaderIm) && (
+                <p className="mt-1 font-mono text-[10px] text-red-400">{validateIm(leaderIm)}</p>
+              )}
+            </div>
+
+            <div>
+              <label className="label">Leader&apos;s mobile number</label>
+              <input
+                className={`input ${
+                  validatePhone(captainPhone) ? "border-red-500/70 focus:border-red-500" : ""
+                }`}
+                required
+                maxLength={13}
+                placeholder="+94 XXX XXX XXX"
+                value={captainPhone}
+                onChange={(e) => {
+                  let raw = e.target.value;
+                  if (!raw.startsWith("+94")) {
+                    raw = "+94" + raw.replace(/^\+?9?4?/, "").replace(/\D/g, "");
+                  }
+                  const prefix = "+94";
+                  const digits = raw.slice(prefix.length).replace(/\D/g, "").slice(0, 9);
+                  setCaptainPhone(prefix + digits);
+                }}
+              />
+              {validatePhone(captainPhone) && (
+                <p className="mt-1 font-mono text-[10px] text-red-400">{validatePhone(captainPhone)}</p>
+              )}
+            </div>
+
+            <div className="sm:col-span-2">
+              <label className="label">Leader&apos;s Gaming ID</label>
+              <input
+                className="input"
+                required
+                placeholder="e.g. SniperKing#1234"
+                value={captainGameId}
+                onChange={(e) => setCaptainGameId(e.target.value)}
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* ── Team basics ── */}
+        <div className="rounded border border-night-700/80 bg-night-900/60 p-4">
+          <div className="mb-3 border-b border-night-700/50 pb-2">
+            <span className="font-mono text-xs uppercase tracking-widest text-ember-400">
+              // SQUAD DETAILS
+            </span>
+          </div>
+
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className={isEdit ? "sm:col-span-2" : ""}>
+              <label className="label">Team name</label>
+              <input
+                className="input"
+                required
+                maxLength={30}
+                placeholder="SQUAD_NAME"
+                value={teamName}
+                onChange={(e) => setTeamName(e.target.value)}
+              />
+            </div>
+            {!isEdit && (
+              <div>
+                <label className="label">Team logo (optional, max 4 MB)</label>
+                <input
+                  className="input"
+                  type="file"
+                  accept="image/*"
+                  onChange={(e) => setLogo(e.target.files?.[0] ?? null)}
+                />
+              </div>
+            )}
+          </div>
         </div>
 
         {/* ── Members ── */}

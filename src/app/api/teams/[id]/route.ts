@@ -51,7 +51,7 @@ const playerEditSchema = z.object({
 const rosterSchema = z.object({
   team_name: z.string().min(2).max(30).optional(),
   phone: z.string().min(6).max(20).optional(),
-  email: z.string().email().optional(),
+  captain_name: z.string().min(2).max(60).optional(),
   discord: z.string().max(60).optional(),
   whatsapp: z.string().max(20).optional(),
   players: z.array(playerEditSchema).min(1).max(6).optional(),
@@ -73,7 +73,10 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
     return NextResponse.json({ error: "Invalid input", details: parsed.error.flatten() }, { status: 400 });
   }
 
-  const { players, ...fields } = parsed.data;
+  const { players, captain_name, ...fields } = parsed.data;
+  if (captain_name) {
+    await db().from("users").update({ name: captain_name.trim() }).eq("id", team.captain_id);
+  }
   if (Object.keys(fields).length) {
     await db().from("teams").update(fields).eq("id", params.id);
   }
