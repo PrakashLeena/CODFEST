@@ -105,7 +105,7 @@ export default function AdminPage() {
               </>
             ) : (
               <>
-                📥 Export Registrations (Excel .xlsx)
+                Export Registrations (Excel .xlsx)
               </>
             )}
           </button>
@@ -118,7 +118,7 @@ export default function AdminPage() {
       {alert && (
         <div className="mt-4 flex items-center justify-between border border-purple-500/40 bg-purple-500/10 px-4 py-3 font-mono text-xs text-purple-200">
           {alert}
-          <button onClick={() => setAlert(null)} className="ml-4 text-purple-300 hover:text-white">✕</button>
+          <button onClick={() => setAlert(null)} className="ml-4 text-purple-300 hover:text-white">X</button>
         </div>
       )}
 
@@ -347,14 +347,14 @@ function SquadModal({ isOpen, onClose, onSaved, allTeams = [], editingTeam = nul
               // SQUAD MANAGEMENT OVERRIDE
             </span>
             <h2 className="font-display text-xl font-bold uppercase text-white">
-              {isEditing ? "✏️ Edit Squad & Leader" : "➕ Add Squad Manually"}
+              {isEditing ? "Edit Squad & Leader" : "Add Squad Manually"}
             </h2>
           </div>
           <button
             onClick={onClose}
             className="rounded-lg p-1.5 text-zinc-400 hover:bg-night-800 hover:text-white transition-colors"
           >
-            ✕
+            X
           </button>
         </div>
 
@@ -369,7 +369,7 @@ function SquadModal({ isOpen, onClose, onSaved, allTeams = [], editingTeam = nul
               onChange={(e) => handleSelectTeamChange(e.target.value)}
               className="input !py-2 text-xs font-semibold text-white bg-night-950"
             >
-              <option value="new">➕ [Create New Squad]</option>
+              <option value="new">[+ Create New Squad]</option>
               <optgroup label="── Registered Squads ──">
                 {allTeams.map((t) => (
                   <option key={t.id} value={t.id}>
@@ -413,8 +413,8 @@ function SquadModal({ isOpen, onClose, onSaved, allTeams = [], editingTeam = nul
                   onChange={(e) => setCategory(e.target.value as any)}
                   className="input"
                 >
-                  <option value="boys">👦 Boys Division</option>
-                  <option value="girls">👧 Girls Division</option>
+                  <option value="boys">Boys Division</option>
+                  <option value="girls">Girls Division</option>
                 </select>
               </div>
 
@@ -475,7 +475,7 @@ function SquadModal({ isOpen, onClose, onSaved, allTeams = [], editingTeam = nul
           {/* SECTION 2: LEADER (CAPTAIN) */}
           <div className="border-t border-night-800 pt-5">
             <h3 className="font-mono text-xs font-bold uppercase tracking-wider text-amber-400 mb-3 flex items-center gap-2">
-              <span>👑 2. Team Leader (Player 1)</span>
+              <span>2. Team Leader (Player 1)</span>
               <span className="rounded bg-amber-500/20 px-2 py-0.5 text-[10px] text-amber-300">Required</span>
             </h3>
             <div className="grid gap-4 sm:grid-cols-3">
@@ -537,7 +537,7 @@ function SquadModal({ isOpen, onClose, onSaved, allTeams = [], editingTeam = nul
           <div className="border-t border-night-800 pt-5">
             <div className="flex items-center justify-between mb-3">
               <h3 className="font-mono text-xs font-bold uppercase tracking-wider text-blue-400">
-                👥 3. Squad Members (Players 2 – {members.length + 1})
+                3. Squad Members (Players 2 – {members.length + 1})
               </h3>
               <button
                 type="button"
@@ -591,7 +591,7 @@ function SquadModal({ isOpen, onClose, onSaved, allTeams = [], editingTeam = nul
                       className="text-red-400 hover:text-red-300 p-1 text-xs"
                       title="Remove player"
                     >
-                      ✕
+                      X
                     </button>
                   )}
                 </div>
@@ -614,7 +614,7 @@ function SquadModal({ isOpen, onClose, onSaved, allTeams = [], editingTeam = nul
               disabled={busy}
               className="btn-primary !py-2.5 px-6 text-xs font-bold"
             >
-              {busy ? "Saving…" : isEditing ? "✓ Save Squad Changes" : "✓ Create Squad"}
+              {busy ? "Saving..." : isEditing ? "Save Squad Changes" : "Create Squad"}
             </button>
           </div>
         </form>
@@ -707,7 +707,7 @@ function RegistrationsPanel({ onDownloadExcel, exporting }: { onDownloadExcel?: 
             onClick={openCreateModal}
             className="flex items-center gap-2 rounded-lg border border-amber-500/60 bg-amber-500/20 px-4 py-2.5 font-mono text-xs font-bold text-amber-300 shadow-[0_0_20px_rgba(245,158,11,0.25)] hover:bg-amber-500/30 hover:text-white transition-all"
           >
-            ➕ Add Squad Manually
+            Add Squad Manually
           </button>
           <button
             onClick={downloadExcel}
@@ -721,7 +721,7 @@ function RegistrationsPanel({ onDownloadExcel, exporting }: { onDownloadExcel?: 
               </>
             ) : (
               <>
-                📊 Export Excel (.xlsx)
+                Export Excel (.xlsx)
               </>
             )}
           </button>
@@ -755,7 +755,7 @@ function RegistrationsPanel({ onDownloadExcel, exporting }: { onDownloadExcel?: 
                   onClick={() => openEditModal(t)}
                   title="Edit team, leader, and squad members"
                 >
-                  ✏️ Edit Squad
+                  Edit Squad
                 </button>
               </div>
             </div>
@@ -776,7 +776,7 @@ function RegistrationsPanel({ onDownloadExcel, exporting }: { onDownloadExcel?: 
                   onClick={() => openEditModal(t)}
                   title="Edit team, leader, and squad members"
                 >
-                  ✏️ Edit
+                  Edit
                 </button>
                 {t.status === "rejected" && (
                   <button className="font-mono text-xs font-bold uppercase text-ember-500 hover:text-ember-400" onClick={() => act(t.id, "approve")}>
@@ -1240,7 +1240,7 @@ function LeaderboardControlPanel() {
       } else {
         setSaveMsg({
           type: "success",
-          text: `✓ Successfully saved Clash result! Calculated Winner: ${calculatedWinner === "team1" ? team1Obj?.team_name : calculatedWinner === "team2" ? team2Obj?.team_name : "Draw"}. Leaderboard & bracket updated!`,
+          text: `Successfully saved Clash result! Calculated Winner: ${calculatedWinner === "team1" ? team1Obj?.team_name : calculatedWinner === "team2" ? team2Obj?.team_name : "Draw"}. Leaderboard & bracket updated!`,
         });
         loadData();
       }
@@ -1266,7 +1266,7 @@ function LeaderboardControlPanel() {
       if (!res.ok) {
         setSaveMsg({ type: "error", text: json.error ?? "Failed to delete clash." });
       } else {
-        setSaveMsg({ type: "success", text: "✓ Clash deleted and standings recalculated." });
+        setSaveMsg({ type: "success", text: "Clash deleted and standings recalculated." });
         // Reset slide index if needed
         setSlideIndex(0);
         loadData();
@@ -1416,7 +1416,7 @@ function LeaderboardControlPanel() {
       for (const tId of teamIds) {
         await saveStandingsOverride(tId);
       }
-      setBatchSaveMsg("✓ All standings saved successfully.");
+      setBatchSaveMsg("All standings saved successfully.");
       setTimeout(() => setBatchSaveMsg(null), 3000);
     } catch {
       setBatchSaveMsg("Error saving some standings.");
@@ -1470,7 +1470,7 @@ function LeaderboardControlPanel() {
                 : "border border-night-700 bg-night-800 text-zinc-400 hover:text-white"
             }`}
           >
-            <span>🏆 All Teams</span>
+            <span>All Teams</span>
             <span className="rounded-full bg-night-900 px-2 py-0.5 text-[10px] text-zinc-300 border border-night-700">
               {teams.length}
             </span>
@@ -1484,7 +1484,7 @@ function LeaderboardControlPanel() {
                 : "border border-night-700 bg-night-800 text-zinc-400 hover:text-white"
             }`}
           >
-            <span>👦 Boys Division</span>
+            <span>Boys Division</span>
             <span className="rounded-full bg-blue-950 px-2 py-0.5 text-[10px] text-blue-300 border border-blue-500/30">
               {boysCount}
             </span>
@@ -1498,7 +1498,7 @@ function LeaderboardControlPanel() {
                 : "border border-night-700 bg-night-800 text-zinc-400 hover:text-white"
             }`}
           >
-            <span>👧 Girls Division</span>
+            <span>Girls Division</span>
             <span className="rounded-full bg-pink-950 px-2 py-0.5 text-[10px] text-pink-300 border border-pink-500/30">
               {girlsCount}
             </span>
@@ -1529,7 +1529,7 @@ function LeaderboardControlPanel() {
                   : "border-night-700 bg-night-800 text-zinc-400 hover:text-white"
               }`}
             >
-              {autoSlide ? "▶ Auto-play ON" : "⏸ Auto-play OFF"}
+              {autoSlide ? "Auto-play ON" : "Auto-play OFF"}
             </button>
             <div className="flex items-center gap-1 bg-night-800 p-1 rounded-lg border border-night-700">
               <button
@@ -1537,7 +1537,7 @@ function LeaderboardControlPanel() {
                 className="rounded px-2.5 py-1 text-sm font-bold text-zinc-300 hover:bg-night-700 hover:text-white transition-colors"
                 title="Previous Slide (Left)"
               >
-                ◀
+                &lsaquo;
               </button>
               <span className="font-mono text-xs font-bold text-ember-400 px-2">
                 {clashSlides.length ? `${slideIndex + 1} / ${clashSlides.length}` : "0 / 0"}
@@ -1547,7 +1547,7 @@ function LeaderboardControlPanel() {
                 className="rounded px-2.5 py-1 text-sm font-bold text-zinc-300 hover:bg-night-700 hover:text-white transition-colors"
                 title="Next Slide (Right Slide Animation)"
               >
-                ▶
+                &rsaquo;
               </button>
             </div>
           </div>
@@ -1598,7 +1598,7 @@ function LeaderboardControlPanel() {
                               <span className="rounded bg-blue-500/20 px-2 py-0.5 font-mono text-[10px] font-bold uppercase text-blue-400">TEAM A</span>
                               {isWinner1 && (
                                 <span className="flex items-center gap-1 rounded bg-amber-500/20 px-2 py-0.5 font-mono text-[10px] font-bold uppercase text-amber-400 border border-amber-500/30">
-                                  🏆 VICTORY
+                                  VICTORY
                                 </span>
                               )}
                             </div>
@@ -1631,7 +1631,7 @@ function LeaderboardControlPanel() {
                             <div className="flex items-center justify-end gap-2">
                               {isWinner2 && (
                                 <span className="flex items-center gap-1 rounded bg-amber-500/20 px-2 py-0.5 font-mono text-[10px] font-bold uppercase text-amber-400 border border-amber-500/30">
-                                  🏆 VICTORY
+                                  VICTORY
                                 </span>
                               )}
                               <span className="rounded bg-red-500/20 px-2 py-0.5 font-mono text-[10px] font-bold uppercase text-red-400">TEAM B</span>
@@ -1661,14 +1661,14 @@ function LeaderboardControlPanel() {
                             onClick={() => loadMatchIntoEditor(currentMatch)}
                             className="rounded-lg border border-ember-500/40 bg-ember-600/10 px-3 py-1 font-mono text-xs font-bold text-ember-400 hover:bg-ember-600/20 transition-all"
                           >
-                            ✎ Edit this Clash
+                            Edit this Clash
                           </button>
                           <button
                             onClick={() => deleteClash(currentMatch.id)}
                             disabled={deleteBusy}
                             className="rounded-lg border border-red-500/40 bg-red-600/10 px-3 py-1 font-mono text-xs font-bold text-red-400 hover:bg-red-600/20 transition-all disabled:opacity-40"
                           >
-                            {deleteBusy ? "Deleting…" : "🗑 Delete"}
+                            {deleteBusy ? "Deleting..." : "Delete"}
                           </button>
                         </div>
                       </div>
@@ -1859,7 +1859,7 @@ function LeaderboardControlPanel() {
             <span className="text-red-400">{team2Obj?.team_name ?? "Team B"} ({totalScore2})</span>
           </div>
           <div className="mt-2 inline-flex items-center gap-2 rounded-full border border-ember-500/50 bg-ember-600/20 px-4 py-1 font-mono text-xs font-bold text-white shadow-lg">
-            <span>🏆 RESULT:</span>
+            <span>RESULT:</span>
             <span className={calculatedWinner === "team1" ? "text-blue-400 font-black" : calculatedWinner === "team2" ? "text-red-400 font-black" : "text-amber-400 font-black"}>
               {winnerTitle}
             </span>
@@ -2040,7 +2040,7 @@ function LeaderboardControlPanel() {
                           className="text-zinc-600 hover:text-red-400 p-1 text-xs"
                           title="Remove row"
                         >
-                          ✕
+                          X
                         </button>
                       </td>
                     </tr>
@@ -2239,7 +2239,7 @@ function LeaderboardControlPanel() {
                           className="text-zinc-600 hover:text-red-400 p-1 text-xs"
                           title="Remove row"
                         >
-                          ✕
+                          X
                         </button>
                       </td>
                     </tr>
@@ -2323,7 +2323,7 @@ function LeaderboardControlPanel() {
             disabled={saveBusy}
             className="btn-primary !px-8 !py-3 text-sm font-bold shadow-[0_0_20px_rgba(249,115,22,0.4)]"
           >
-            {saveBusy ? "Saving & Updating Standings…" : "💾 Save & Publish Clash Score to Leaderboard"}
+            {saveBusy ? "Saving & Updating Standings…" : "Save & Publish Clash Score to Leaderboard"}
           </button>
         </div>
       </div>
@@ -2346,7 +2346,6 @@ function LeaderboardControlPanel() {
                 disabled={batchSaveBusy}
                 className="flex items-center gap-1.5 rounded-lg border border-amber-500/50 bg-amber-500/20 px-3.5 py-1.5 font-mono text-xs font-bold text-amber-300 hover:bg-amber-500/30 transition-all shadow-[0_0_15px_rgba(245,158,11,0.25)]"
               >
-                <span>💾</span>
                 <span>{batchSaveBusy ? "Saving All…" : `Save All Changes (${Object.keys(editingStandings).length})`}</span>
               </button>
             )}
@@ -2377,7 +2376,7 @@ function LeaderboardControlPanel() {
                   : "bg-night-800 text-zinc-400 hover:text-white"
               }`}
             >
-              👦 Boys ({boysCount})
+              Boys ({boysCount})
             </button>
             <button
               onClick={() => setAdminDivision("girls")}
@@ -2387,7 +2386,7 @@ function LeaderboardControlPanel() {
                   : "bg-night-800 text-zinc-400 hover:text-white"
               }`}
             >
-              👧 Girls ({girlsCount})
+              Girls ({girlsCount})
             </button>
           </div>
 
@@ -2504,8 +2503,8 @@ function LeaderboardControlPanel() {
                             : "border-blue-500/50 bg-blue-950/40 text-blue-300"
                         }`}
                       >
-                        <option value="boys">👦 Boys</option>
-                        <option value="girls">👧 Girls</option>
+                        <option value="boys">Boys</option>
+                        <option value="girls">Girls</option>
                       </select>
                     </td>
 
@@ -2804,7 +2803,7 @@ function TeamsControlPanel({ onDownloadExcel, exporting }: { onDownloadExcel?: (
             onClick={openCreateModal}
             className="flex items-center gap-2 rounded-lg border border-amber-500/60 bg-amber-500/20 px-3.5 py-1.5 font-mono text-xs font-bold text-amber-300 hover:bg-amber-500/30 hover:text-white transition-all shadow-[0_0_15px_rgba(245,158,11,0.2)]"
           >
-            ➕ Add Squad Manually
+            Add Squad Manually
           </button>
           {onDownloadExcel && (
             <button
@@ -2812,7 +2811,7 @@ function TeamsControlPanel({ onDownloadExcel, exporting }: { onDownloadExcel?: (
               disabled={exporting}
               className="flex items-center gap-2 rounded-lg border border-emerald-500/50 bg-emerald-600/15 px-3.5 py-1.5 font-mono text-xs font-bold text-emerald-300 hover:bg-emerald-600/25 transition-all disabled:opacity-50"
             >
-              {exporting ? "Exporting…" : "📥 Export Excel (.xlsx)"}
+              {exporting ? "Exporting…" : "Export Excel (.xlsx)"}
             </button>
           )}
         </div>
@@ -2889,7 +2888,7 @@ function TeamsControlPanel({ onDownloadExcel, exporting }: { onDownloadExcel?: (
                       onClick={() => act(t.id, "approve")}
                       className="rounded border border-green-600/40 bg-green-600/10 px-3 py-1 font-mono text-xs font-bold text-green-400 hover:bg-green-600/20 transition-colors"
                     >
-                      ✓ Approve
+                      Approve
                     </button>
                   )}
                   {t.status !== "rejected" && (
@@ -2897,7 +2896,7 @@ function TeamsControlPanel({ onDownloadExcel, exporting }: { onDownloadExcel?: (
                       onClick={() => act(t.id, "reject")}
                       className="rounded border border-red-600/40 bg-red-600/10 px-3 py-1 font-mono text-xs font-bold text-red-400 hover:bg-red-600/20 transition-colors"
                     >
-                      ✕ Reject
+                      Reject
                     </button>
                   )}
 
@@ -2906,7 +2905,7 @@ function TeamsControlPanel({ onDownloadExcel, exporting }: { onDownloadExcel?: (
                     className="rounded border border-amber-500/50 bg-amber-500/15 px-3 py-1 font-mono text-xs font-bold text-amber-300 hover:bg-amber-500/25 transition-colors"
                     title="Edit team details, leader, and squad members"
                   >
-                    ✏️ Edit Squad
+                    Edit Squad
                   </button>
                 </div>
               </div>
@@ -2936,10 +2935,10 @@ function TeamsControlPanel({ onDownloadExcel, exporting }: { onDownloadExcel?: (
 
               {/* Contact + meta */}
               <div className="flex flex-wrap gap-x-6 gap-y-1 px-5 py-3 text-[11px] text-zinc-500">
-                {t.phone    && <span>📞 {t.phone}</span>}
-                {t.email    && <span>✉ {t.email}</span>}
-                {t.discord  && <span>🎮 {t.discord}</span>}
-                {t.whatsapp && <span>💬 {t.whatsapp}</span>}
+                {t.phone    && <span>Phone: {t.phone}</span>}
+                {t.email    && <span>Email: {t.email}</span>}
+                {t.discord  && <span>Discord: {t.discord}</span>}
+                {t.whatsapp && <span>WhatsApp: {t.whatsapp}</span>}
                 <span className="ml-auto">Registered {new Date(t.created_at).toLocaleDateString("en-IN")}</span>
               </div>
             </div>

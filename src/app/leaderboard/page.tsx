@@ -110,7 +110,13 @@ export default function LeaderboardPage() {
 
   useSocketEvents(
     ["leaderboard:updated", "match:finished", "match:live_score", "match:clash_updated", "bracket:updated"],
-    () => {
+    (event, data) => {
+      if (event === "leaderboard:updated" && data) {
+        if (data.leaderboard) setRows(data.leaderboard);
+        if (data.boys_leaderboard) setBoysRows(data.boys_leaderboard);
+        if (data.girls_leaderboard) setGirlsRows(data.girls_leaderboard);
+        setLastUpdated(new Date());
+      }
       load();
     }
   );
@@ -218,7 +224,7 @@ export default function LeaderboardPage() {
                 : "border border-night-700 bg-night-800 text-zinc-400 hover:text-white"
             }`}
           >
-            <span>🏆 All Teams</span>
+            <span>All Teams</span>
             <span className="rounded-full bg-night-900 px-2 py-0.5 text-[10px] text-zinc-300 border border-night-700">
               {rows.length}
             </span>
@@ -232,7 +238,7 @@ export default function LeaderboardPage() {
                 : "border border-night-700 bg-night-800 text-zinc-400 hover:text-white"
             }`}
           >
-            <span>👦 Boys Division</span>
+            <span>Boys Division</span>
             <span className="rounded-full bg-blue-950 px-2 py-0.5 text-[10px] text-blue-300 border border-blue-500/30">
               {boysCount}
             </span>
@@ -246,7 +252,7 @@ export default function LeaderboardPage() {
                 : "border border-night-700 bg-night-800 text-zinc-400 hover:text-white"
             }`}
           >
-            <span>👧 Girls Division</span>
+            <span>Girls Division</span>
             <span className="rounded-full bg-pink-950 px-2 py-0.5 text-[10px] text-pink-300 border border-pink-500/30">
               {girlsCount}
             </span>
@@ -279,7 +285,7 @@ export default function LeaderboardPage() {
                     : "border-night-700 bg-night-800 text-zinc-400 hover:text-white"
                 }`}
               >
-                {autoSlide ? "▶ Auto-slide ON" : "⏸ Auto-slide OFF"}
+                {autoSlide ? "Auto-slide ON" : "Auto-slide OFF"}
               </button>
 
               <div className="flex items-center gap-1 bg-night-800 p-1 rounded-lg border border-night-700">
@@ -288,7 +294,7 @@ export default function LeaderboardPage() {
                   className="rounded px-2.5 sm:px-3 py-1 text-xs sm:text-sm font-bold text-zinc-300 hover:bg-night-700 hover:text-white transition-colors"
                   aria-label="Previous clash slide"
                 >
-                  ◀
+                  &lsaquo;
                 </button>
                 <span className="font-mono text-xs font-bold text-ember-400 px-1.5 sm:px-2 whitespace-nowrap">
                   {slideIndex + 1} / {clashes.length}
@@ -298,7 +304,7 @@ export default function LeaderboardPage() {
                   className="rounded px-2.5 sm:px-3 py-1 text-xs sm:text-sm font-bold text-zinc-300 hover:bg-night-700 hover:text-white transition-colors"
                   aria-label="Next clash slide"
                 >
-                  ▶
+                  &rsaquo;
                 </button>
               </div>
             </div>
@@ -379,11 +385,11 @@ export default function LeaderboardPage() {
                                   ? "border border-pink-500/40 bg-pink-500/20 text-pink-300"
                                   : "border border-blue-500/40 bg-blue-500/20 text-blue-300"
                               }`}>
-                                {cat1 === "girls" ? "👧 GIRLS" : "👦 BOYS"}
+                                {cat1 === "girls" ? "GIRLS" : "BOYS"}
                               </span>
                               {isWinner1 && (
                                 <span className="flex items-center gap-1 rounded bg-amber-500/20 px-1.5 sm:px-2 py-0.5 font-mono text-[9px] sm:text-[10px] font-bold uppercase text-amber-400 border border-amber-500/40 animate-pulse">
-                                  🏆 VICTORY
+                                  VICTORY
                                 </span>
                               )}
                             </div>
@@ -416,7 +422,7 @@ export default function LeaderboardPage() {
                             <div className="flex flex-wrap items-center justify-end gap-1.5 sm:gap-2">
                               {isWinner2 && (
                                 <span className="flex items-center gap-1 rounded bg-amber-500/20 px-1.5 sm:px-2 py-0.5 font-mono text-[9px] sm:text-[10px] font-bold uppercase text-amber-400 border border-amber-500/40 animate-pulse">
-                                  🏆 VICTORY
+                                  VICTORY
                                 </span>
                               )}
                               <span className={`rounded px-2 py-0.5 font-mono text-[9px] sm:text-[10px] font-bold uppercase ${
@@ -424,7 +430,7 @@ export default function LeaderboardPage() {
                                   ? "border border-pink-500/40 bg-pink-500/20 text-pink-300"
                                   : "border border-blue-500/40 bg-blue-500/20 text-blue-300"
                               }`}>
-                                {cat2 === "girls" ? "👧 GIRLS" : "👦 BOYS"}
+                                {cat2 === "girls" ? "GIRLS" : "BOYS"}
                               </span>
                               <span className="rounded bg-red-500/20 px-2 py-0.5 font-mono text-[9px] sm:text-[10px] font-bold uppercase text-red-400">
                                 TEAM B
@@ -608,10 +614,10 @@ export default function LeaderboardPage() {
             <div>
               <h2 className="section-title text-lg sm:text-xl">
                 {division === "boys"
-                  ? "👦 Boys Division Standings"
+                  ? "Boys Division Standings"
                   : division === "girls"
-                  ? "👧 Girls Division Standings"
-                  : "🏆 Overall Team Standings"}
+                  ? "Girls Division Standings"
+                  : "Overall Team Standings"}
               </h2>
               <p className="font-mono text-xs text-zinc-400">
                 {division === "all"
@@ -652,13 +658,9 @@ export default function LeaderboardPage() {
                   <div className="flex items-center justify-between gap-3">
                     <div className="flex items-center gap-3 min-w-0 flex-1">
                       <div className="flex items-center justify-center font-mono font-black text-sm w-7 h-7 rounded-lg bg-night-800 border border-night-700 flex-shrink-0">
-                        {r.rank === 1 ? (
-                          <span className="text-amber-400">👑</span>
-                        ) : (
-                          <span className={r.rank === 2 ? "text-zinc-300" : r.rank === 3 ? "text-amber-600" : "text-zinc-400"}>
-                            #{r.rank}
-                          </span>
-                        )}
+                        <span className={r.rank === 1 ? "text-amber-400" : r.rank === 2 ? "text-zinc-300" : r.rank === 3 ? "text-amber-600" : "text-zinc-400"}>
+                          #{r.rank}
+                        </span>
                       </div>
                       <TeamMark name={r.team_name} logoUrl={r.logo_url} size={28} />
                       <div className="min-w-0">
@@ -668,11 +670,11 @@ export default function LeaderboardPage() {
                         <div className="mt-0.5">
                           {r.category === "girls" ? (
                             <span className="inline-block rounded border border-pink-500/40 bg-pink-500/10 px-1.5 py-0.2 font-mono text-[9px] font-bold text-pink-300">
-                              👧 GIRLS
+                              GIRLS
                             </span>
                           ) : (
                             <span className="inline-block rounded border border-blue-500/40 bg-blue-500/10 px-1.5 py-0.2 font-mono text-[9px] font-bold text-blue-300">
-                              👦 BOYS
+                              BOYS
                             </span>
                           )}
                         </div>
@@ -771,7 +773,6 @@ export default function LeaderboardPage() {
                             >
                               {String(r.rank).padStart(2, "0")}
                             </span>
-                            {r.rank === 1 && <span className="text-amber-400">👑</span>}
                           </div>
                         </td>
                         <td className="px-5 py-4">
@@ -780,11 +781,11 @@ export default function LeaderboardPage() {
                         <td className="px-4 py-4 text-center">
                           {r.category === "girls" ? (
                             <span className="rounded-full border border-pink-500/50 bg-pink-500/10 px-2.5 py-1 font-mono text-[10px] font-bold text-pink-300 shadow-[0_0_10px_rgba(236,72,153,0.2)]">
-                              👧 Girls
+                              Girls
                             </span>
                           ) : (
                             <span className="rounded-full border border-blue-500/50 bg-blue-500/10 px-2.5 py-1 font-mono text-[10px] font-bold text-blue-300 shadow-[0_0_10px_rgba(59,130,246,0.2)]">
-                              👦 Boys
+                              Boys
                             </span>
                           )}
                         </td>

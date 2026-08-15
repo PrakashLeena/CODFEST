@@ -275,7 +275,7 @@ function getWelcomeEmailHtml({
             <tr>
               <td align="center" style="background-color:#8cfd30; padding: 26px 24px;" class="px-24">
                 <p style="margin:0; font-family:'Poppins', Arial, sans-serif; font-size:14px; font-weight:700; letter-spacing:2px; text-transform:uppercase; color:#000000;">
-                  Registration Confirmed 🎉
+                  Registration Confirmed
                 </p>
               </td>
             </tr>
@@ -451,7 +451,7 @@ export async function sendWelcomeEmail({
   const { error } = await resendClient().emails.send({
     from,
     to,
-    subject: "Welcome to CODFEST — Registration Confirmed! 🎉",
+    subject: "Welcome to CODFEST — Registration Confirmed!",
     html: getWelcomeEmailHtml({ name, teamName, regId }),
   });
 

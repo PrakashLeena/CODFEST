@@ -112,13 +112,9 @@ export default function BracketView({ bracket }: { bracket: Match[] }) {
                 CHAMPION CONFIRMED
               </div>
               <div className="bg-night-850 p-5 text-center">
-                <motion.div
-                  animate={{ rotate: [0, -5, 5, 0], scale: [1, 1.1, 1] }}
-                  transition={{ duration: 2, repeat: Infinity, repeatDelay: 3 }}
-                  className="text-3xl"
-                >
-                  🏆
-                </motion.div>
+                <div className="font-mono text-xs font-bold uppercase tracking-[0.2em] text-ember-400">
+                  VICTOR
+                </div>
                 <div className="mt-2 font-display text-2xl font-bold uppercase tracking-[0.05em] text-white">
                   {champion.winner_id === champion.team1_id
                     ? champion.team1?.team_name

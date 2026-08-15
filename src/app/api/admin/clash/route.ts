@@ -3,7 +3,7 @@ import { z } from "zod";
 import { db } from "@/lib/supabase";
 import { requireRole } from "@/lib/auth";
 import { logAudit } from "@/lib/audit";
-import { MATCH_SELECT, recalcTeamStats, getLeaderboard, getSystemSettings, updateSystemSettings } from "@/lib/standings";
+import { MATCH_SELECT, recalcTeamStats, getLeaderboard, getLeaderboardSplits, getSystemSettings, updateSystemSettings } from "@/lib/standings";
 import { emitEvent } from "@/lib/socket";
 
 export const dynamic = "force-dynamic";
@@ -223,7 +223,7 @@ function isValidUuid(val?: string | null): boolean {
     .eq("id", targetMatchId)
     .single();
 
-  const leaderboard = await getLeaderboard();
+  const splits = await getLeaderboardSplits();
 
   // Broadcast realtime socket events
   emitEvent("match:finished", {
@@ -231,7 +231,7 @@ function isValidUuid(val?: string | null): boolean {
     finalScore: [totalScore1, totalScore2],
     winnerId,
   });
-  emitEvent("leaderboard:updated", { leaderboard });
+  emitEvent("leaderboard:updated", splits);
 
   await logAudit(admin.id, "match.clash_updated", targetMatchId ?? null, {
     team1_id,
@@ -248,7 +248,9 @@ function isValidUuid(val?: string | null): boolean {
     winnerId,
     totalScore1,
     totalScore2,
-    leaderboard,
+    leaderboard: splits.leaderboard,
+    boys_leaderboard: splits.boys_leaderboard,
+    girls_leaderboard: splits.girls_leaderboard,
   });
 }
 
@@ -286,15 +288,20 @@ export async function DELETE(req: Request) {
   // Recalculate standings for both teams
   await recalcTeamStats([match.team1_id, match.team2_id]);
 
-  const leaderboard = await getLeaderboard();
-  emitEvent("leaderboard:updated", { leaderboard });
+  const splits = await getLeaderboardSplits();
+  emitEvent("leaderboard:updated", splits);
 
   await logAudit(admin.id, "match.clash_deleted", match_id, {
     team1_id: match.team1_id,
     team2_id: match.team2_id,
   });
 
-  return NextResponse.json({ ok: true, leaderboard });
+  return NextResponse.json({
+    ok: true,
+    leaderboard: splits.leaderboard,
+    boys_leaderboard: splits.boys_leaderboard,
+    girls_leaderboard: splits.girls_leaderboard,
+  });
 }
 
 /**
@@ -435,8 +442,8 @@ export async function PATCH(req: Request) {
     });
   }
 
-  const leaderboard = await getLeaderboard();
-  emitEvent("leaderboard:updated", { leaderboard });
+  const splits = await getLeaderboardSplits();
+  emitEvent("leaderboard:updated", splits);
 
   await logAudit(admin.id, "team.stats_manual_override", team_id ?? "batch", {
     points,
@@ -450,7 +457,9 @@ export async function PATCH(req: Request) {
 
   return NextResponse.json({
     ok: true,
-    leaderboard,
+    leaderboard: splits.leaderboard,
+    boys_leaderboard: splits.boys_leaderboard,
+    girls_leaderboard: splits.girls_leaderboard,
     team_categories: currentCategories,
     boys_team_orders: currentBoysOrders,
     girls_team_orders: currentGirlsOrders,

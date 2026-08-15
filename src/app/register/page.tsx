@@ -147,7 +147,7 @@ export default function RegisterPage() {
       return;
     }
 
-    // ✅ Within 1-hour window → check team status
+    // Within 1-hour window -> check team status
     fetch("/api/teams/my")
       .then((r) => r.json())
       .then((json) => {
@@ -643,7 +643,7 @@ export default function RegisterPage() {
         <StepBar step={1} />
 
         <div className="mt-4 border border-ember-400/30 bg-ember-600/10 px-4 py-3 font-mono text-xs text-ember-300">
-          ✓ Your account was found for{" "}
+          Your account was found for{" "}
           <strong className="text-ember-400">{emailInput}</strong>.
           Click below to receive a sign-in code and continue your registration.
         </div>
@@ -694,13 +694,13 @@ export default function RegisterPage() {
       {/* Edit success banner */}
       {editSuccess && (
         <div className="mt-4 border border-green-500/40 bg-green-500/10 px-4 py-3 font-mono text-xs text-green-300">
-          ✓ Changes saved successfully.
+          Changes saved successfully.
         </div>
       )}
 
       {isEdit && !editSuccess && (
         <div className="mt-4 border border-ember-400/30 bg-ember-600/10 px-4 py-3 font-mono text-xs text-ember-300">
-          ✏ You&apos;re editing your existing team. Changes take effect immediately.
+          You&apos;re editing your existing team. Changes take effect immediately.
         </div>
       )}
 
@@ -735,7 +735,7 @@ export default function RegisterPage() {
             <div>
               <div className="flex items-center justify-between">
                 <label className="label">Leader&apos;s email</label>
-                <span className="font-mono text-[10px] text-zinc-500">🔒 Locked</span>
+                <span className="font-mono text-[10px] text-zinc-500">[Locked]</span>
               </div>
               <input
                 className="input cursor-not-allowed border-night-700 bg-night-950/60 text-zinc-400 opacity-75"
