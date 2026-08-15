@@ -6,6 +6,7 @@ import TeamMark from "@/components/TeamMark";
 import StatusBadge from "@/components/StatusBadge";
 import { useSocketEvents } from "@/hooks/useSocket";
 import { ROUND_NAMES, type Match } from "@/lib/types";
+import type { PlayerKillStat } from "@/lib/standings";
 
 interface LeaderboardRow {
   rank: number;
@@ -71,6 +72,15 @@ export default function LeaderboardPage() {
 
   // Division split filter state ("all" | "boys" | "girls")
   const [division, setDivision] = useState<"all" | "boys" | "girls">("all");
+  const [viewMode, setViewMode] = useState<"standings" | "killers">("standings");
+
+  // Top Killers states
+  const [boysKillers, setBoysKillers] = useState<PlayerKillStat[]>([]);
+  const [girlsKillers, setGirlsKillers] = useState<PlayerKillStat[]>([]);
+  const [allKillers, setAllKillers] = useState<PlayerKillStat[]>([]);
+  const [topKillerBoys, setTopKillerBoys] = useState<PlayerKillStat | null>(null);
+  const [topKillerGirls, setTopKillerGirls] = useState<PlayerKillStat | null>(null);
+  const [topKillerOverall, setTopKillerOverall] = useState<PlayerKillStat | null>(null);
 
   // Slide carousel state
   const [slideIndex, setSlideIndex] = useState(0);
@@ -91,6 +101,12 @@ export default function LeaderboardPage() {
       if (json.leaderboard) setRows(json.leaderboard);
       if (json.boys_leaderboard) setBoysRows(json.boys_leaderboard);
       if (json.girls_leaderboard) setGirlsRows(json.girls_leaderboard);
+      if (json.boys_top_killers) setBoysKillers(json.boys_top_killers);
+      if (json.girls_top_killers) setGirlsKillers(json.girls_top_killers);
+      if (json.all_top_killers) setAllKillers(json.all_top_killers);
+      if (json.top_killer_boys) setTopKillerBoys(json.top_killer_boys);
+      if (json.top_killer_girls) setTopKillerGirls(json.top_killer_girls);
+      if (json.top_killer_overall) setTopKillerOverall(json.top_killer_overall);
       if (json.clashes) setClashes(json.clashes);
       setLastUpdated(new Date());
     } catch {
@@ -115,6 +131,12 @@ export default function LeaderboardPage() {
         if (data.leaderboard) setRows(data.leaderboard);
         if (data.boys_leaderboard) setBoysRows(data.boys_leaderboard);
         if (data.girls_leaderboard) setGirlsRows(data.girls_leaderboard);
+        if (data.boys_top_killers) setBoysKillers(data.boys_top_killers);
+        if (data.girls_top_killers) setGirlsKillers(data.girls_top_killers);
+        if (data.all_top_killers) setAllKillers(data.all_top_killers);
+        if (data.top_killer_boys) setTopKillerBoys(data.top_killer_boys);
+        if (data.top_killer_girls) setTopKillerGirls(data.top_killer_girls);
+        if (data.top_killer_overall) setTopKillerOverall(data.top_killer_overall);
         setLastUpdated(new Date());
       }
       load();
@@ -137,6 +159,18 @@ export default function LeaderboardPage() {
     }
     return rows;
   }, [rows, boysRows, girlsRows, division]);
+
+  const displayKillers = useMemo(() => {
+    if (division === "boys") return boysKillers;
+    if (division === "girls") return girlsKillers;
+    return allKillers;
+  }, [division, boysKillers, girlsKillers, allKillers]);
+
+  const activeTopKiller = useMemo(() => {
+    if (division === "boys") return topKillerBoys;
+    if (division === "girls") return topKillerGirls;
+    return topKillerOverall;
+  }, [division, topKillerBoys, topKillerGirls, topKillerOverall]);
 
   const displayClashes = useMemo(() => {
     if (division === "all") return clashes;
@@ -607,8 +641,320 @@ export default function LeaderboardPage() {
         </div>
       )}
 
-      {/* SECTION 2: OFFICIAL TOURNAMENT STANDINGS */}
-      {hasAnyScores ? (
+      {/* VIEW MODE TABS & MOST KILLER SPOTLIGHT */}
+      <div className="space-y-6">
+        {/* VIEW MODE SELECTOR (Team Standings vs Top Killers) */}
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-night-800 pb-3">
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setViewMode("standings")}
+              className={`rounded-xl px-4 py-2 font-mono text-xs font-bold transition-all ${
+                viewMode === "standings"
+                  ? "border border-amber-500/60 bg-amber-500/20 text-amber-300 shadow-[0_0_15px_rgba(245,158,11,0.2)]"
+                  : "border border-night-700 bg-night-800 text-zinc-400 hover:text-white"
+              }`}
+            >
+              Team Standings
+            </button>
+            <button
+              onClick={() => setViewMode("killers")}
+              className={`flex items-center gap-2 rounded-xl px-4 py-2 font-mono text-xs font-bold transition-all ${
+                viewMode === "killers"
+                  ? "border border-red-500/60 bg-red-600/25 text-red-300 shadow-[0_0_20px_rgba(239,68,68,0.3)]"
+                  : "border border-night-700 bg-night-800 text-zinc-400 hover:text-white"
+              }`}
+            >
+              <span>Most Lethal Killers</span>
+              {displayKillers.length > 0 && (
+                <span className="rounded-full bg-red-950 px-2 py-0.2 text-[10px] text-red-300 border border-red-500/40">
+                  {displayKillers.length}
+                </span>
+              )}
+            </button>
+          </div>
+
+          <div className="font-mono text-xs text-zinc-400">
+            {viewMode === "standings" ? "Ranking by Team Score" : "Auto-Calculated by Total Player Kills"}
+          </div>
+        </div>
+
+        {/* MOST KILLER MVP SHOWCASE SPOTLIGHT BANNER */}
+        {(topKillerBoys || topKillerGirls || topKillerOverall) && (
+          <div className="rounded-2xl border border-red-500/30 bg-gradient-to-r from-red-950/30 via-night-850 to-night-900 p-4 sm:p-6 shadow-2xl">
+            <div className="flex items-center justify-between border-b border-night-800 pb-3 mb-4">
+              <div className="flex items-center gap-2">
+                <span className="h-2.5 w-2.5 rounded-full bg-red-500 animate-ping" />
+                <h3 className="font-display text-sm sm:text-base font-bold uppercase tracking-wider text-white">
+                  {division === "boys"
+                    ? "Boys Division - Kill Leader (MVP)"
+                    : division === "girls"
+                    ? "Girls Division - Kill Leader (MVP)"
+                    : "Tournament Kill Leaders (MVP)"}
+                </h3>
+              </div>
+              <span className="font-mono text-[11px] text-red-400 uppercase tracking-widest border border-red-500/30 bg-red-500/10 px-2.5 py-0.5 rounded-full">
+                Auto-Detected From Match Scores
+              </span>
+            </div>
+
+            <div className={`grid gap-4 ${division === "all" ? "md:grid-cols-2" : "grid-cols-1"}`}>
+              {/* BOYS TOP KILLER CARD */}
+              {(division === "boys" || (division === "all" && topKillerBoys)) && topKillerBoys && (
+                <div className="rounded-xl border border-blue-500/40 bg-night-800/80 p-4 relative overflow-hidden shadow-lg">
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="rounded bg-blue-500/20 px-2 py-0.5 font-mono text-[10px] font-bold uppercase text-blue-300 border border-blue-500/30">
+                          BOYS KILL LEADER
+                        </span>
+                        <span className="font-mono text-[11px] text-amber-400 font-bold">#1 TOP FRAGGER</span>
+                      </div>
+                      <h4 className="mt-1 font-display text-xl sm:text-2xl font-black uppercase text-white truncate">
+                        {topKillerBoys.name}
+                      </h4>
+                      <p className="font-mono text-xs text-zinc-400">Team: <strong className="text-zinc-200">{topKillerBoys.team_name}</strong></p>
+                    </div>
+
+                    <div className="text-right bg-night-900 border border-blue-500/30 px-3.5 py-2 rounded-xl">
+                      <div className="font-mono text-2xl sm:text-3xl font-black text-red-400">
+                        {topKillerBoys.total_kills}
+                      </div>
+                      <div className="font-mono text-[9px] uppercase tracking-wider text-zinc-500 font-bold">
+                        TOTAL KILLS
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="mt-3 grid grid-cols-4 gap-2 border-t border-night-700/60 pt-2.5 font-mono text-[11px] text-center">
+                    <div className="bg-night-900/60 p-1.5 rounded border border-night-700/50">
+                      <div className="text-zinc-500 text-[9px] uppercase">K/D Ratio</div>
+                      <div className="font-bold text-green-400 mt-0.5">{topKillerBoys.kd_ratio}</div>
+                    </div>
+                    <div className="bg-night-900/60 p-1.5 rounded border border-night-700/50">
+                      <div className="text-zinc-500 text-[9px] uppercase">Matches</div>
+                      <div className="font-bold text-zinc-300 mt-0.5">{topKillerBoys.matches_played}</div>
+                    </div>
+                    <div className="bg-night-900/60 p-1.5 rounded border border-night-700/50">
+                      <div className="text-zinc-500 text-[9px] uppercase">Avg K/M</div>
+                      <div className="font-bold text-blue-300 mt-0.5">{topKillerBoys.avg_kills}</div>
+                    </div>
+                    <div className="bg-night-900/60 p-1.5 rounded border border-night-700/50">
+                      <div className="text-zinc-500 text-[9px] uppercase">Best Match</div>
+                      <div className="font-bold text-amber-400 mt-0.5">{topKillerBoys.max_kills_single_match} K</div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* GIRLS TOP KILLER CARD */}
+              {(division === "girls" || (division === "all" && topKillerGirls)) && topKillerGirls && (
+                <div className="rounded-xl border border-pink-500/40 bg-night-800/80 p-4 relative overflow-hidden shadow-lg">
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="rounded bg-pink-500/20 px-2 py-0.5 font-mono text-[10px] font-bold uppercase text-pink-300 border border-pink-500/30">
+                          GIRLS KILL LEADER
+                        </span>
+                        <span className="font-mono text-[11px] text-amber-400 font-bold">#1 TOP FRAGGER</span>
+                      </div>
+                      <h4 className="mt-1 font-display text-xl sm:text-2xl font-black uppercase text-white truncate">
+                        {topKillerGirls.name}
+                      </h4>
+                      <p className="font-mono text-xs text-zinc-400">Team: <strong className="text-zinc-200">{topKillerGirls.team_name}</strong></p>
+                    </div>
+
+                    <div className="text-right bg-night-900 border border-pink-500/30 px-3.5 py-2 rounded-xl">
+                      <div className="font-mono text-2xl sm:text-3xl font-black text-pink-400">
+                        {topKillerGirls.total_kills}
+                      </div>
+                      <div className="font-mono text-[9px] uppercase tracking-wider text-zinc-500 font-bold">
+                        TOTAL KILLS
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="mt-3 grid grid-cols-4 gap-2 border-t border-night-700/60 pt-2.5 font-mono text-[11px] text-center">
+                    <div className="bg-night-900/60 p-1.5 rounded border border-night-700/50">
+                      <div className="text-zinc-500 text-[9px] uppercase">K/D Ratio</div>
+                      <div className="font-bold text-green-400 mt-0.5">{topKillerGirls.kd_ratio}</div>
+                    </div>
+                    <div className="bg-night-900/60 p-1.5 rounded border border-night-700/50">
+                      <div className="text-zinc-500 text-[9px] uppercase">Matches</div>
+                      <div className="font-bold text-zinc-300 mt-0.5">{topKillerGirls.matches_played}</div>
+                    </div>
+                    <div className="bg-night-900/60 p-1.5 rounded border border-night-700/50">
+                      <div className="text-zinc-500 text-[9px] uppercase">Avg K/M</div>
+                      <div className="font-bold text-pink-300 mt-0.5">{topKillerGirls.avg_kills}</div>
+                    </div>
+                    <div className="bg-night-900/60 p-1.5 rounded border border-night-700/50">
+                      <div className="text-zinc-500 text-[9px] uppercase">Best Match</div>
+                      <div className="font-bold text-amber-400 mt-0.5">{topKillerGirls.max_kills_single_match} K</div>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* SECTION 2: VIEW TOGGLE DISPLAY (STANDINGS vs TOP KILLERS TABLE) */}
+      {viewMode === "killers" ? (
+        <div className="space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+            <div>
+              <h2 className="section-title text-lg sm:text-xl">
+                {division === "boys"
+                  ? "Boys Division - Most Killers Leaderboard"
+                  : division === "girls"
+                  ? "Girls Division - Most Killers Leaderboard"
+                  : "Overall Tournament - Most Killers Leaderboard"}
+              </h2>
+              <p className="font-mono text-xs text-zinc-400">
+                Individual player kill leaderboard computed automatically across all recorded matches
+              </p>
+            </div>
+            <span className="font-mono text-xs text-zinc-400">
+              {displayKillers.length} {displayKillers.length === 1 ? "Player" : "Players"}
+            </span>
+          </div>
+
+          {/* MOBILE KILLERS LIST */}
+          <div className="block sm:hidden space-y-3">
+            {displayKillers.length === 0 ? (
+              <div className="p-8 text-center text-zinc-500 font-mono text-xs card">
+                No player kill statistics recorded yet in this division.
+              </div>
+            ) : (
+              displayKillers.map((k) => (
+                <div
+                  key={`${k.name}-${k.team_id}`}
+                  className={`card p-4 space-y-3 border ${
+                    k.rank === 1
+                      ? "border-red-500/40 bg-red-500/5 shadow-[0_0_15px_rgba(239,68,68,0.15)]"
+                      : "border-night-700 bg-night-850"
+                  }`}
+                >
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-3 min-w-0 flex-1">
+                      <div className="flex items-center justify-center font-mono font-black text-sm w-7 h-7 rounded-lg bg-night-800 border border-night-700 flex-shrink-0 text-amber-400">
+                        #{k.rank}
+                      </div>
+                      <div className="min-w-0">
+                        <div className="font-display font-bold text-white uppercase text-sm truncate">
+                          {k.name}
+                        </div>
+                        <div className="font-mono text-xs text-zinc-400 truncate">
+                          Team: {k.team_name}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="text-right flex-shrink-0 bg-night-800/90 border border-red-500/30 px-3 py-1 rounded-lg">
+                      <span className="font-mono text-lg font-black text-red-400">{k.total_kills}</span>
+                      <span className="font-mono text-[9px] text-zinc-500 ml-1">KILLS</span>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-4 gap-1.5 pt-2 border-t border-night-800/80 font-mono text-[10px] text-center">
+                    <div className="bg-night-900/60 p-1.5 rounded border border-night-800">
+                      <div className="text-zinc-500 text-[9px] uppercase">K/D</div>
+                      <div className="font-bold text-green-400 mt-0.5">{k.kd_ratio}</div>
+                    </div>
+                    <div className="bg-night-900/60 p-1.5 rounded border border-night-800">
+                      <div className="text-zinc-500 text-[9px] uppercase">Deaths</div>
+                      <div className="font-bold text-red-400 mt-0.5">{k.total_deaths}</div>
+                    </div>
+                    <div className="bg-night-900/60 p-1.5 rounded border border-night-800">
+                      <div className="text-zinc-500 text-[9px] uppercase">Assists</div>
+                      <div className="font-bold text-blue-400 mt-0.5">{k.total_assists}</div>
+                    </div>
+                    <div className="bg-night-900/60 p-1.5 rounded border border-night-800">
+                      <div className="text-zinc-500 text-[9px] uppercase">Score</div>
+                      <div className="font-bold text-amber-400 mt-0.5">{k.total_score}</div>
+                    </div>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+
+          {/* DESKTOP KILLERS TABLE */}
+          <div className="hidden sm:block card overflow-x-auto shadow-2xl">
+            <table className="w-full min-w-[700px] text-sm">
+              <thead>
+                <tr className="border-b border-night-700 bg-night-800 text-left font-mono text-[10px] font-bold uppercase tracking-[0.1em] text-zinc-400">
+                  <th className="px-5 py-4 w-16"># Rank</th>
+                  <th className="px-5 py-4">Player Name</th>
+                  <th className="px-5 py-4">Team</th>
+                  <th className="px-4 py-4 text-center w-24">Division</th>
+                  <th className="px-4 py-4 text-center w-24 text-red-400">Total Kills</th>
+                  <th className="px-4 py-4 text-center w-20 text-green-400">K/D</th>
+                  <th className="px-4 py-4 text-center w-20">Assists</th>
+                  <th className="px-4 py-4 text-center w-20">Deaths</th>
+                  <th className="px-4 py-4 text-center w-24">Avg K/M</th>
+                  <th className="px-4 py-4 text-center w-24 text-amber-400">Total Score</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-night-800">
+                {displayKillers.length === 0 ? (
+                  <tr>
+                    <td colSpan={10} className="px-4 py-16 text-center text-zinc-500 font-mono">
+                      No player kill statistics recorded yet in this division.
+                    </td>
+                  </tr>
+                ) : (
+                  displayKillers.map((k) => (
+                    <tr
+                      key={`${k.name}-${k.team_id}`}
+                      className={`font-mono transition-colors hover:bg-night-850/80 ${
+                        k.rank === 1 ? "bg-red-500/5" : ""
+                      }`}
+                    >
+                      <td className="px-5 py-4 font-bold text-amber-400">
+                        #{k.rank}
+                      </td>
+                      <td className="px-5 py-4 font-bold text-white">
+                        {k.name}
+                      </td>
+                      <td className="px-5 py-4 text-zinc-300">
+                        {k.team_name}
+                      </td>
+                      <td className="px-4 py-4 text-center">
+                        <span className={`rounded-full px-2.5 py-1 font-mono text-[10px] font-bold ${
+                          k.category === "girls"
+                            ? "border border-pink-500/50 bg-pink-500/10 text-pink-300"
+                            : "border border-blue-500/50 bg-blue-500/10 text-blue-300"
+                        }`}>
+                          {k.category === "girls" ? "Girls" : "Boys"}
+                        </span>
+                      </td>
+                      <td className="px-4 py-4 text-center font-black text-xl text-red-400">
+                        {k.total_kills}
+                      </td>
+                      <td className="px-4 py-4 text-center font-bold text-green-400">
+                        {k.kd_ratio}
+                      </td>
+                      <td className="px-4 py-4 text-center text-blue-400">
+                        {k.total_assists}
+                      </td>
+                      <td className="px-4 py-4 text-center text-red-300">
+                        {k.total_deaths}
+                      </td>
+                      <td className="px-4 py-4 text-center text-zinc-300">
+                        {k.avg_kills}
+                      </td>
+                      <td className="px-4 py-4 text-center font-bold text-amber-400">
+                        {k.total_score}
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      ) : hasAnyScores ? (
         <div className="space-y-4">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
             <div>

@@ -4,6 +4,23 @@ import type { Match } from "@/lib/types";
 const WIN_POINTS = 3;
 const DRAW_POINTS = 1;
 
+export interface PlayerKillStat {
+  rank: number;
+  name: string;
+  team_id: string;
+  team_name: string;
+  team_logo?: string | null;
+  category: "boys" | "girls";
+  total_kills: number;
+  total_deaths: number;
+  total_assists: number;
+  total_score: number;
+  matches_played: number;
+  kd_ratio: number;
+  avg_kills: number;
+  max_kills_single_match: number;
+}
+
 /**
  * Recomputes a team's full standing from every finished or scored match it played.
  * Uses cumulative player score across all matches as the team points.
@@ -163,16 +180,159 @@ export async function getLeaderboard() {
 }
 
 /**
+ * Aggregates all player statistics across all played matches
+ * and computes top killer leaderboards for Boys and Girls divisions separately.
+ */
+export async function getTopKillers() {
+  const [{ data: matches }, { data: teams }, settings] = await Promise.all([
+    db()
+      .from("matches")
+      .select("id, team1_id, team2_id, status, submission_team1, submission_team2, team1:teams!matches_team1_id_fkey(id, team_name, logo_url), team2:teams!matches_team2_id_fkey(id, team_name, logo_url)")
+      .in("status", ["finished", "live"]),
+    db().from("teams").select("id, team_name, logo_url"),
+    getSystemSettings(),
+  ]);
+
+  const teamCategories: Record<string, "boys" | "girls"> = settings.team_categories ?? {};
+  const teamMap: Record<string, { id: string; team_name: string; logo_url?: string | null }> = {};
+  for (const t of teams ?? []) {
+    teamMap[t.id] = t;
+  }
+
+  const playerMap: Record<
+    string,
+    {
+      name: string;
+      team_id: string;
+      team_name: string;
+      team_logo?: string | null;
+      category: "boys" | "girls";
+      total_kills: number;
+      total_deaths: number;
+      total_assists: number;
+      total_score: number;
+      matches_played: number;
+      max_kills: number;
+    }
+  > = {};
+
+  for (const m of matches ?? []) {
+    const processTeamSubmission = (teamId: string | null, sub: any, teamObj: any) => {
+      if (!teamId || !sub || typeof sub !== "object" || !Array.isArray((sub as any).players)) return;
+      const effectiveTeam = teamObj || teamMap[teamId] || { id: teamId, team_name: "Unknown Team" };
+      const category: "boys" | "girls" = teamCategories[teamId] ?? "boys";
+
+      for (const p of (sub as any).players) {
+        const rawName = String(p.name || "").trim();
+        if (!rawName) continue;
+        if (
+          (rawName.toLowerCase().startsWith("member ") || rawName.toLowerCase().startsWith("player ")) &&
+          (Number(p.kills) || 0) === 0 &&
+          (Number(p.score) || 0) === 0
+        ) {
+          continue;
+        }
+
+        const playerKey = `${rawName.toLowerCase()}__${teamId}`;
+        const kills = Math.max(0, Number(p.kills) || 0);
+        const deaths = Math.max(0, Number(p.deaths) || 0);
+        const assists = Math.max(0, Number(p.assists) || 0);
+        const score = Math.max(0, Number(p.score) || 0);
+
+        if (!playerMap[playerKey]) {
+          playerMap[playerKey] = {
+            name: rawName,
+            team_id: teamId,
+            team_name: effectiveTeam.team_name,
+            team_logo: effectiveTeam.logo_url,
+            category,
+            total_kills: 0,
+            total_deaths: 0,
+            total_assists: 0,
+            total_score: 0,
+            matches_played: 0,
+            max_kills: 0,
+          };
+        }
+
+        const entry = playerMap[playerKey];
+        entry.total_kills += kills;
+        entry.total_deaths += deaths;
+        entry.total_assists += assists;
+        entry.total_score += score;
+        entry.matches_played += 1;
+        if (kills > entry.max_kills) {
+          entry.max_kills = kills;
+        }
+      }
+    };
+
+    processTeamSubmission(m.team1_id, m.submission_team1, m.team1);
+    processTeamSubmission(m.team2_id, m.submission_team2, m.team2);
+  }
+
+  const allPlayers = Object.values(playerMap).map((p) => {
+    const kd_ratio = p.total_deaths > 0 ? Number((p.total_kills / p.total_deaths).toFixed(2)) : p.total_kills;
+    const avg_kills = p.matches_played > 0 ? Number((p.total_kills / p.matches_played).toFixed(1)) : p.total_kills;
+    return {
+      name: p.name,
+      team_id: p.team_id,
+      team_name: p.team_name,
+      team_logo: p.team_logo,
+      category: p.category,
+      total_kills: p.total_kills,
+      total_deaths: p.total_deaths,
+      total_assists: p.total_assists,
+      total_score: p.total_score,
+      matches_played: p.matches_played,
+      kd_ratio,
+      avg_kills,
+      max_kills_single_match: p.max_kills,
+    };
+  });
+
+  const sortKillers = (a: any, b: any) => {
+    if (b.total_kills !== a.total_kills) return b.total_kills - a.total_kills;
+    if (b.kd_ratio !== a.kd_ratio) return b.kd_ratio - a.kd_ratio;
+    if (b.total_score !== a.total_score) return b.total_score - a.total_score;
+    return a.name.localeCompare(b.name);
+  };
+
+  const rankedAll = [...allPlayers].sort(sortKillers).map((p, i) => ({ rank: i + 1, ...p }));
+  const boysKillers = allPlayers
+    .filter((p) => (p.category ?? "boys") === "boys")
+    .sort(sortKillers)
+    .map((p, i) => ({ rank: i + 1, ...p }));
+  const girlsKillers = allPlayers
+    .filter((p) => p.category === "girls")
+    .sort(sortKillers)
+    .map((p, i) => ({ rank: i + 1, ...p }));
+
+  return {
+    all_top_killers: rankedAll,
+    boys_top_killers: boysKillers,
+    girls_top_killers: girlsKillers,
+    top_killer_boys: boysKillers.length > 0 && boysKillers[0].total_kills > 0 ? boysKillers[0] : null,
+    top_killer_girls: girlsKillers.length > 0 && girlsKillers[0].total_kills > 0 ? girlsKillers[0] : null,
+    top_killer_overall: rankedAll.length > 0 && rankedAll[0].total_kills > 0 ? rankedAll[0] : null,
+  };
+}
+
+/**
  * Returns the overall leaderboard plus automatically ranked Boys and Girls divisions
- * separately, each ordered strictly by cumulative player score and performance.
+ * separately, each ordered strictly by cumulative player score and performance,
+ * along with the most lethal killer statistics for both divisions.
  */
 export async function getLeaderboardSplits() {
-  const [{ data }, settings] = await Promise.all([
-    db()
-      .from("teams")
-      .select("id, team_name, logo_url, points, wins, losses, draws, maps_won, maps_lost, status")
-      .neq("status", "rejected"),
-    getSystemSettings(),
+  const [[{ data }, settings], killersData] = await Promise.all([
+    Promise.all([
+      db()
+        .from("teams")
+        .select("id, team_name, logo_url, points, wins, losses, draws, maps_won, maps_lost, status")
+        .neq("status", "rejected"),
+      getSystemSettings(),
+    ]),
+    getTopKillers(),
   ]);
 
   const teamCategories: Record<string, "boys" | "girls"> = settings.team_categories ?? {};
@@ -209,6 +369,7 @@ export async function getLeaderboardSplits() {
     leaderboard: overallLeaderboard,
     boys_leaderboard: boysLeaderboard,
     girls_leaderboard: girlsLeaderboard,
+    ...killersData,
   };
 }
 
