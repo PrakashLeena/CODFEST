@@ -3,18 +3,21 @@ import { z } from "zod";
 import { db } from "@/lib/supabase";
 import { currentUser } from "@/lib/auth";
 import { logAudit } from "@/lib/audit";
-import { MATCH_SELECT } from "@/lib/standings";
+import { getSystemSettings, updateSystemSettings, MATCH_SELECT } from "@/lib/standings";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
 /** Public team profile: roster, stats and match history. Contact PII is stripped for non-owners. */
 export async function GET(_req: Request, { params }: { params: { id: string } }) {
-  const { data: team } = await db()
-    .from("teams")
-    .select("*, captain:users!teams_captain_id_fkey(name)")
-    .eq("id", params.id)
-    .single();
+  const [{ data: team }, settings] = await Promise.all([
+    db()
+      .from("teams")
+      .select("*, captain:users!teams_captain_id_fkey(name)")
+      .eq("id", params.id)
+      .single(),
+    getSystemSettings(),
+  ]);
 
   if (!team) return NextResponse.json({ error: "Team not found" }, { status: 404 });
 
@@ -25,6 +28,9 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
     delete team.email;
     delete team.whatsapp;
   }
+
+  const leaderGameIds = settings.leader_game_ids ?? {};
+  (team as any).game_id = leaderGameIds[params.id] || "";
 
   const [{ data: players }, { data: matches }] = await Promise.all([
     db().from("players").select("*").eq("team_id", params.id).order("is_substitute"),
@@ -74,9 +80,15 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
     return NextResponse.json({ error: "Invalid input", details: parsed.error.flatten() }, { status: 400 });
   }
 
-  const { players, captain_name, ...fields } = parsed.data;
+  const { players, captain_name, game_id, ...fields } = parsed.data;
   if (captain_name) {
     await db().from("users").update({ name: captain_name.trim() }).eq("id", team.captain_id);
+  }
+  if (game_id !== undefined) {
+    const settings = await getSystemSettings();
+    const leaderGameIds = { ...(settings.leader_game_ids ?? {}) };
+    leaderGameIds[params.id] = game_id.trim();
+    await updateSystemSettings({ leader_game_ids: leaderGameIds });
   }
   if (Object.keys(fields).length) {
     await db().from("teams").update(fields).eq("id", params.id);

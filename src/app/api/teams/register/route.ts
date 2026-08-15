@@ -73,7 +73,6 @@ export async function POST(req: Request) {
       logo_url: logoUrl,
       phone: d.phone,
       email: d.email,
-      game_id: d.game_id?.trim() || null,
       discord: d.discord,
       whatsapp: d.whatsapp,
       captain_id: user.id,
@@ -85,6 +84,15 @@ export async function POST(req: Request) {
   if (error) {
     const msg = error.code === "23505" ? "Team name already taken" : error.message;
     return NextResponse.json({ error: msg }, { status: 409 });
+  }
+
+  // Save leader's game_id in system settings so it doesn't break supabase schema
+  if (d.game_id?.trim()) {
+    const { getSystemSettings, updateSystemSettings } = await import("@/lib/standings");
+    const settings = await getSystemSettings();
+    const leaderGameIds = { ...(settings.leader_game_ids ?? {}) };
+    leaderGameIds[team.id] = d.game_id.trim();
+    await updateSystemSettings({ leader_game_ids: leaderGameIds });
   }
 
   const { error: playersError } = await db().from("players").insert(

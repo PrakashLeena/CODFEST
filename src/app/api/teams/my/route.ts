@@ -28,6 +28,11 @@ export async function GET() {
 
   if (!team) return NextResponse.json({ team: null, players: [], user: captainUser });
 
+  const { getSystemSettings } = await import("@/lib/standings");
+  const settings = await getSystemSettings();
+  const leaderGameIds = settings.leader_game_ids ?? {};
+  (team as any).game_id = leaderGameIds[team.id] || "";
+
   const { data: players } = await db()
     .from("players")
     .select("*")

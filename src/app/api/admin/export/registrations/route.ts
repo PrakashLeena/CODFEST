@@ -3,6 +3,8 @@ import { db } from "@/lib/supabase";
 import { requireRole } from "@/lib/auth";
 import * as XLSX from "xlsx";
 
+import { getSystemSettings } from "@/lib/standings";
+
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
@@ -26,10 +28,12 @@ export async function GET() {
       { data: teams, error: tErr },
       { data: players, error: pErr },
       { data: users, error: uErr },
+      settings,
     ] = await Promise.all([
       db().from("teams").select("*").order("created_at", { ascending: false }),
       db().from("players").select("*").order("is_substitute"),
       db().from("users").select("id, name, email"),
+      getSystemSettings(),
     ]);
 
     if (tErr) {
@@ -69,14 +73,17 @@ export async function GET() {
     //           [repeated for up to MAX_MEMBERS] M# Name, M# IGN, M# Email, M# Phone, M# IM No., M# Role
     const MAX_MEMBERS = 6;
 
+    const leaderGameIds = settings.leader_game_ids ?? {};
+    const leaderImNumbers = settings.leader_im_numbers ?? {};
+
     const teamMemberRows = (teams ?? []).map((t: any, i: number) => {
       const captain = t.captain_id ? userMap.get(t.captain_id) : null;
       const teamPlayers = playersByTeam.get(t.id) ?? [];
       const leaderName = captain?.name ?? t.captain_name ?? "—";
       const leaderEmail = captain?.email ?? t.email ?? "—";
       const leaderPhone = t.phone ?? "—";
-      const leaderGameId = t.game_id ?? "—";
-      const leaderIm = t.im_number ?? "—";
+      const leaderGameId = leaderGameIds[t.id] ?? t.game_id ?? "—";
+      const leaderIm = leaderImNumbers[t.id] ?? t.im_number ?? "—";
 
       const row: Record<string, string | number> = {
         "#": i + 1,
@@ -132,6 +139,8 @@ export async function GET() {
       const teamPlayers = playersByTeam.get(t.id) ?? [];
       const leaderName = captain?.name ?? t.captain_name ?? "—";
       const leaderEmail = captain?.email ?? t.email ?? "—";
+      const leaderGameId = leaderGameIds[t.id] ?? t.game_id ?? "—";
+      const leaderIm = leaderImNumbers[t.id] ?? t.im_number ?? "—";
 
       // 1st member: Team Leader
       memberRows.push({
@@ -139,10 +148,10 @@ export async function GET() {
         "Team Name": t.team_name ?? "—",
         "Team Status": String(t.status ?? "pending").toUpperCase(),
         "Member Name": leaderName,
-        "In-Game ID (IGN)": t.game_id ?? "—",
+        "In-Game ID (IGN)": leaderGameId,
         "Email": leaderEmail,
         "Phone": t.phone ?? "—",
-        "IM Number": t.im_number ?? "—",
+        "IM Number": leaderIm,
         "Role": "Leader (Captain)",
       });
 
@@ -170,6 +179,8 @@ export async function GET() {
       const teamPlayers = playersByTeam.get(t.id) ?? [];
       const leaderName = captain?.name ?? t.captain_name ?? "—";
       const leaderEmail = captain?.email ?? t.email ?? "—";
+      const leaderGameId = leaderGameIds[t.id] ?? t.game_id ?? "—";
+      const leaderIm = leaderImNumbers[t.id] ?? t.im_number ?? "—";
 
       // Team header row
       rosterRows.push({
@@ -192,10 +203,10 @@ export async function GET() {
         "Team": "", "Status": "", "Captain": "", "Phone": "", "Discord": "",
         "#": "1",
         "Member Name": leaderName,
-        "IGN": t.game_id || "—",
+        "IGN": leaderGameId,
         "Member Email": leaderEmail,
         "Member Phone": t.phone || "—",
-        "IM Number": t.im_number || "—",
+        "IM Number": leaderIm,
         "Role": "Leader (Captain)",
       });
 

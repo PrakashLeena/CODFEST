@@ -146,9 +146,371 @@ export default function AdminPage() {
 
 /* ------------------------------------------------------------------ */
 
+interface AddTeamModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  onCreated: () => void;
+}
+
+function AddTeamModal({ isOpen, onClose, onCreated }: AddTeamModalProps) {
+  const [teamName, setTeamName] = useState("");
+  const [category, setCategory] = useState<"boys" | "girls">("boys");
+  const [status, setStatus] = useState<"approved" | "pending">("approved");
+  const [points, setPoints] = useState<number>(0);
+  const [wins, setWins] = useState<number>(0);
+  const [losses, setLosses] = useState<number>(0);
+  const [draws, setDraws] = useState<number>(0);
+
+  // Leader details
+  const [captainName, setCaptainName] = useState("");
+  const [captainEmail, setCaptainEmail] = useState("");
+  const [captainPhone, setCaptainPhone] = useState("");
+  const [captainGameId, setCaptainGameId] = useState("");
+  const [captainIm, setCaptainIm] = useState("");
+
+  // 4 squad members
+  const [members, setMembers] = useState([
+    { player_name: "", game_id: "", phone: "", email: "", im_number: "", is_substitute: false },
+    { player_name: "", game_id: "", phone: "", email: "", im_number: "", is_substitute: false },
+    { player_name: "", game_id: "", phone: "", email: "", im_number: "", is_substitute: false },
+    { player_name: "", game_id: "", phone: "", email: "", im_number: "", is_substitute: false },
+  ]);
+
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  if (!isOpen) return null;
+
+  const updateMember = (index: number, field: string, value: any) => {
+    setMembers((prev) => {
+      const next = [...prev];
+      next[index] = { ...next[index], [field]: value };
+      return next;
+    });
+  };
+
+  const addExtraMember = () => {
+    setMembers((prev) => [
+      ...prev,
+      { player_name: "", game_id: "", phone: "", email: "", im_number: "", is_substitute: true },
+    ]);
+  };
+
+  const removeMember = (index: number) => {
+    setMembers((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!teamName.trim()) return setError("Team name is required");
+    if (!captainName.trim()) return setError("Leader name is required");
+
+    setBusy(true);
+    setError(null);
+
+    try {
+      const validPlayers = members.filter((m) => m.player_name.trim().length > 0);
+      const res = await fetch("/api/admin/teams", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          team_name: teamName.trim(),
+          captain_name: captainName.trim(),
+          email: captainEmail.trim(),
+          phone: captainPhone.trim(),
+          game_id: captainGameId.trim(),
+          im_number: captainIm.trim(),
+          category,
+          status,
+          points: Number(points) || 0,
+          wins: Number(wins) || 0,
+          losses: Number(losses) || 0,
+          draws: Number(draws) || 0,
+          players: validPlayers,
+        }),
+      });
+
+      const json = await res.json();
+      if (!res.ok) {
+        setError(json.error ?? "Failed to create squad");
+        setBusy(false);
+        return;
+      }
+
+      onCreated();
+      onClose();
+    } catch (err: any) {
+      setError(err.message || "Network error");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 overflow-y-auto">
+      <div className="relative w-full max-w-2xl rounded-2xl border border-ember-500/30 bg-night-900 shadow-2xl p-6 my-8 max-h-[90vh] overflow-y-auto">
+        <div className="flex items-center justify-between border-b border-night-800 pb-4">
+          <div>
+            <span className="font-mono text-[10px] uppercase tracking-widest text-ember-400 font-bold">
+              // ADMIN OVERRIDE
+            </span>
+            <h2 className="font-display text-xl font-bold uppercase text-white">
+              Add Squad Manually
+            </h2>
+          </div>
+          <button
+            onClick={onClose}
+            className="rounded-lg p-1.5 text-zinc-400 hover:bg-night-800 hover:text-white transition-colors"
+          >
+            ✕
+          </button>
+        </div>
+
+        {error && (
+          <div className="mt-4 rounded-lg border border-red-500/40 bg-red-500/10 px-4 py-2.5 font-mono text-xs text-red-300">
+            {error}
+          </div>
+        )}
+
+        <form onSubmit={handleSubmit} className="mt-6 space-y-6">
+          {/* SECTION 1: TEAM INFO */}
+          <div>
+            <h3 className="font-mono text-xs font-bold uppercase tracking-wider text-ember-400 mb-3">
+              1. Team Info & Division
+            </h3>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div>
+                <label className="label">Team Name *</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g. OP CLAN"
+                  value={teamName}
+                  onChange={(e) => setTeamName(e.target.value)}
+                  className="input"
+                />
+              </div>
+
+              <div>
+                <label className="label">Division</label>
+                <select
+                  value={category}
+                  onChange={(e) => setCategory(e.target.value as any)}
+                  className="input"
+                >
+                  <option value="boys">👦 Boys Division</option>
+                  <option value="girls">👧 Girls Division</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="label">Registration Status</label>
+                <select
+                  value={status}
+                  onChange={(e) => setStatus(e.target.value as any)}
+                  className="input"
+                >
+                  <option value="approved">Approved (Active immediately)</option>
+                  <option value="pending">Pending Approval</option>
+                </select>
+              </div>
+
+              <div className="grid grid-cols-4 gap-2">
+                <div>
+                  <label className="label text-[10px]">Points</label>
+                  <input
+                    type="number"
+                    value={points}
+                    onChange={(e) => setPoints(Number(e.target.value))}
+                    className="input text-center font-mono !px-1"
+                  />
+                </div>
+                <div>
+                  <label className="label text-[10px]">Wins</label>
+                  <input
+                    type="number"
+                    value={wins}
+                    onChange={(e) => setWins(Number(e.target.value))}
+                    className="input text-center font-mono !px-1"
+                  />
+                </div>
+                <div>
+                  <label className="label text-[10px]">Losses</label>
+                  <input
+                    type="number"
+                    value={losses}
+                    onChange={(e) => setLosses(Number(e.target.value))}
+                    className="input text-center font-mono !px-1"
+                  />
+                </div>
+                <div>
+                  <label className="label text-[10px]">Draws</label>
+                  <input
+                    type="number"
+                    value={draws}
+                    onChange={(e) => setDraws(Number(e.target.value))}
+                    className="input text-center font-mono !px-1"
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* SECTION 2: LEADER (CAPTAIN) */}
+          <div className="border-t border-night-800 pt-5">
+            <h3 className="font-mono text-xs font-bold uppercase tracking-wider text-amber-400 mb-3 flex items-center gap-2">
+              <span>👑 2. Team Leader (Player 1)</span>
+              <span className="rounded bg-amber-500/20 px-2 py-0.5 text-[10px] text-amber-300">Required</span>
+            </h3>
+            <div className="grid gap-4 sm:grid-cols-3">
+              <div>
+                <label className="label">Leader Name *</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="Full Name"
+                  value={captainName}
+                  onChange={(e) => setCaptainName(e.target.value)}
+                  className="input"
+                />
+              </div>
+              <div>
+                <label className="label">Leader Game ID (IGN)</label>
+                <input
+                  type="text"
+                  placeholder="e.g. CaptainPro"
+                  value={captainGameId}
+                  onChange={(e) => setCaptainGameId(e.target.value)}
+                  className="input"
+                />
+              </div>
+              <div>
+                <label className="label">Mobile Number</label>
+                <input
+                  type="tel"
+                  placeholder="e.g. 9876543210"
+                  value={captainPhone}
+                  onChange={(e) => setCaptainPhone(e.target.value)}
+                  className="input"
+                />
+              </div>
+              <div>
+                <label className="label">Email (Optional)</label>
+                <input
+                  type="email"
+                  placeholder="auto-generated if empty"
+                  value={captainEmail}
+                  onChange={(e) => setCaptainEmail(e.target.value)}
+                  className="input"
+                />
+              </div>
+              <div>
+                <label className="label">IM Number (Optional)</label>
+                <input
+                  type="text"
+                  placeholder="e.g. IM1234"
+                  value={captainIm}
+                  onChange={(e) => setCaptainIm(e.target.value)}
+                  className="input"
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* SECTION 3: SQUAD MEMBERS */}
+          <div className="border-t border-night-800 pt-5">
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="font-mono text-xs font-bold uppercase tracking-wider text-blue-400">
+                👥 3. Squad Members (Players 2 – {members.length + 1})
+              </h3>
+              <button
+                type="button"
+                onClick={addExtraMember}
+                className="font-mono text-xs text-ember-400 hover:text-ember-300 font-bold"
+              >
+                + Add Member
+              </button>
+            </div>
+
+            <div className="space-y-3">
+              {members.map((m, idx) => (
+                <div
+                  key={idx}
+                  className="rounded-xl border border-night-800 bg-night-850 p-3 grid gap-3 sm:grid-cols-[auto_1fr_1fr_1fr_auto] items-center"
+                >
+                  <span className="font-mono text-xs font-bold text-zinc-500 px-1">
+                    #{idx + 2}
+                  </span>
+                  <div>
+                    <input
+                      type="text"
+                      placeholder={`Player ${idx + 2} Name`}
+                      value={m.player_name}
+                      onChange={(e) => updateMember(idx, "player_name", e.target.value)}
+                      className="input !py-1.5 text-xs"
+                    />
+                  </div>
+                  <div>
+                    <input
+                      type="text"
+                      placeholder="In-Game ID (IGN)"
+                      value={m.game_id}
+                      onChange={(e) => updateMember(idx, "game_id", e.target.value)}
+                      className="input !py-1.5 text-xs"
+                    />
+                  </div>
+                  <div>
+                    <input
+                      type="text"
+                      placeholder="Phone / IM"
+                      value={m.phone || m.im_number}
+                      onChange={(e) => updateMember(idx, "phone", e.target.value)}
+                      className="input !py-1.5 text-xs"
+                    />
+                  </div>
+                  {members.length > 4 && (
+                    <button
+                      type="button"
+                      onClick={() => removeMember(idx)}
+                      className="text-red-400 hover:text-red-300 p-1 text-xs"
+                      title="Remove player"
+                    >
+                      ✕
+                    </button>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* ACTIONS */}
+          <div className="flex items-center justify-end gap-3 border-t border-night-800 pt-5">
+            <button
+              type="button"
+              onClick={onClose}
+              className="btn-ghost !py-2.5 text-xs"
+              disabled={busy}
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={busy}
+              className="btn-primary !py-2.5 px-6 text-xs font-bold"
+            >
+              {busy ? "Creating Squad…" : "✓ Create Squad"}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
 function RegistrationsPanel({ onDownloadExcel, exporting }: { onDownloadExcel?: () => void; exporting?: boolean }) {
   const [teams, setTeams] = useState<any[]>([]);
   const [localDownloading, setLocalDownloading] = useState(false);
+  const [showAddModal, setShowAddModal] = useState(false);
 
   const load = useCallback(() => {
     fetch("/api/admin/teams").then((r) => r.json()).then((j) => setTeams(j.teams ?? []));
@@ -191,35 +553,52 @@ function RegistrationsPanel({ onDownloadExcel, exporting }: { onDownloadExcel?: 
 
   return (
     <div className="space-y-8">
-      {/* EXPORT BANNER / BUTTON */}
+      {/* ADD SQUAD MODAL */}
+      <AddTeamModal
+        isOpen={showAddModal}
+        onClose={() => setShowAddModal(false)}
+        onCreated={() => {
+          load();
+        }}
+      />
+
+      {/* EXPORT & ADD SQUAD BANNER / ACTIONS */}
       <div className="flex flex-wrap items-center justify-between gap-4 rounded-xl border border-emerald-500/30 bg-gradient-to-r from-emerald-950/30 via-night-850 to-emerald-950/30 p-4 shadow-lg">
         <div>
           <div className="flex items-center gap-2">
             <span className="h-2.5 w-2.5 rounded-full bg-emerald-400 animate-pulse" />
             <h3 className="font-display text-sm font-bold uppercase tracking-wider text-white">
-              Registration Database Export
+              Registration Database & Squad Management
             </h3>
           </div>
           <p className="mt-0.5 font-mono text-xs text-zinc-400">
             Total teams: <span className="font-bold text-white">{teams.length}</span> ({pending.length} pending, {teams.filter(t => t.status === "approved").length} approved)
           </p>
         </div>
-        <button
-          onClick={downloadExcel}
-          disabled={isBusy}
-          className="flex items-center gap-2 rounded-lg border border-emerald-500/60 bg-emerald-600/20 px-5 py-2.5 font-mono text-xs font-bold text-emerald-300 shadow-[0_0_20px_rgba(16,185,129,0.2)] hover:bg-emerald-600/30 hover:text-white transition-all disabled:opacity-50"
-        >
-          {isBusy ? (
-            <>
-              <span className="h-4 w-4 rounded-full border-2 border-emerald-300 border-t-transparent animate-spin" />
-              Generating Excel file…
-            </>
-          ) : (
-            <>
-              📊 Download All Registrations (.xlsx)
-            </>
-          )}
-        </button>
+        <div className="flex flex-wrap items-center gap-3">
+          <button
+            onClick={() => setShowAddModal(true)}
+            className="flex items-center gap-2 rounded-lg border border-amber-500/60 bg-amber-500/20 px-4 py-2.5 font-mono text-xs font-bold text-amber-300 shadow-[0_0_20px_rgba(245,158,11,0.25)] hover:bg-amber-500/30 hover:text-white transition-all"
+          >
+            ➕ Add Squad Manually
+          </button>
+          <button
+            onClick={downloadExcel}
+            disabled={isBusy}
+            className="flex items-center gap-2 rounded-lg border border-emerald-500/60 bg-emerald-600/20 px-4 py-2.5 font-mono text-xs font-bold text-emerald-300 shadow-[0_0_20px_rgba(16,185,129,0.2)] hover:bg-emerald-600/30 hover:text-white transition-all disabled:opacity-50"
+          >
+            {isBusy ? (
+              <>
+                <span className="h-4 w-4 rounded-full border-2 border-emerald-300 border-t-transparent animate-spin" />
+                Generating Excel…
+              </>
+            ) : (
+              <>
+                📊 Export Excel (.xlsx)
+              </>
+            )}
+          </button>
+        </div>
       </div>
 
       <section>
