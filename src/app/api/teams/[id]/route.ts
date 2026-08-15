@@ -51,6 +51,7 @@ const playerEditSchema = z.object({
 const rosterSchema = z.object({
   team_name: z.string().min(2).max(30).optional(),
   phone: z.string().min(6).max(20).optional(),
+  game_id: z.string().max(50).optional(),
   captain_name: z.string().min(2).max(60).optional(),
   discord: z.string().max(60).optional(),
   whatsapp: z.string().max(20).optional(),

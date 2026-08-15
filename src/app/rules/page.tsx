@@ -26,7 +26,7 @@ const bannedItems = [
   ["Equipment", "Claymores, C4, RPGs, Stun Grenades — max 1 Frag + 1 Flash/Smoke per player"],
 ];
 
-const mapPool = ["Crash", "Backlot", "Strike", "District", "Crossfire"];
+const mapPool = ["Crash", "Backlot", "Strike", "Crossfire", "District", "Killhouse"];
 
 const matchSettings: Record<Division, { chips: string[]; rows: string[][]; note?: string }> = {
   boys: {

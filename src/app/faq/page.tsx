@@ -8,7 +8,7 @@ const FAQS: [string, string][] = [
   ["What screenshot do I need?", "The final scoreboard at the end of the last round, showing both team scores clearly. Take it before anyone leaves the server."],
   ["What happens if the other captain never submits?", "The match stays in 'Awaiting scores'. After the deadline in the rules, admins can resolve it manually using the available evidence — usually in favour of the team that submitted proof."],
   ["Can I change my roster after registering?", "Yes, captains can edit their roster from the team dashboard until the bracket is generated. After that, roster changes need admin approval via Discord."],
-  ["Which maps are played?", "Crash, Crossfire, Backlot, Strike and District. The map for each fixture is shown on the match card."],
+  ["Which maps are played?", "Crash, Backlot, Strike, Crossfire, District and Killhouse. The map for each fixture is shown on the match card."],
   ["Is there an entry fee?", "No — CODFEST is free to enter. Check the home page for the current prize pool."],
   ["Where are matches streamed?", "Featured matches carry a 'Watch stream' link on their match card when live."],
 ];

@@ -11,7 +11,7 @@ export async function GET() {
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const { data: team } = await db()
-    .from("teams").select("*").eq("captain_id", user.id).maybeSingle();
+    .from("teams").select("*, captain:users!teams_captain_id_fkey(name)").eq("captain_id", user.id).maybeSingle();
   if (!team) return NextResponse.json({ team: null, players: [], matches: [] });
 
   const [{ data: players }, { data: matches }] = await Promise.all([

@@ -48,22 +48,51 @@ export default function TeamProfilePage() {
 
       <div className="mt-8 grid gap-8 lg:grid-cols-3">
         <div>
-          <h2 className="section-title text-xl">Roster</h2>
+          <div className="flex items-center justify-between">
+            <h2 className="section-title text-xl">Roster</h2>
+            <span className="font-mono text-xs font-bold text-ember-400">
+              5 Members
+            </span>
+          </div>
           <div className="card mt-4 divide-y divide-night-800">
+            {/* Team Leader */}
+            {(team as any).captain?.name && (
+              <div className="flex items-center justify-between px-4 py-3 bg-ember-500/5">
+                <div>
+                  <div className="font-semibold text-white flex items-center gap-1.5">
+                    <span>{(team as any).captain.name}</span>
+                  </div>
+                  {(team as any).game_id && (
+                    <div className="text-xs text-zinc-400">ID: {(team as any).game_id}</div>
+                  )}
+                </div>
+                <span className="rounded border border-ember-500/40 bg-ember-500/20 px-2 py-0.5 font-mono text-[10px] font-bold uppercase text-ember-300 shadow-[0_0_10px_rgba(245,158,11,0.2)]">
+                  Leader
+                </span>
+              </div>
+            )}
+
+            {/* Team Members */}
             {players.map((p) => (
               <div key={p.id} className="flex items-center justify-between px-4 py-3">
                 <div>
                   <div className="font-semibold text-zinc-200">{p.player_name}</div>
-                  <div className="text-xs text-zinc-500">ID: {p.game_id}</div>
+                  <div className="text-xs text-zinc-500">{p.game_id ? `ID: ${p.game_id}` : ""}</div>
                 </div>
-                {p.is_substitute && (
+                {p.is_substitute ? (
                   <span className="border border-night-700 bg-night-600 px-2 py-0.5 font-mono text-[10px] font-bold uppercase text-zinc-400">
                     Sub
+                  </span>
+                ) : (
+                  <span className="font-mono text-[10px] uppercase text-zinc-500">
+                    Member
                   </span>
                 )}
               </div>
             ))}
-            {players.length === 0 && <p className="px-4 py-6 text-sm text-zinc-500">No players listed.</p>}
+            {!((team as any).captain?.name) && players.length === 0 && (
+              <p className="px-4 py-6 text-sm text-zinc-500">No players listed.</p>
+            )}
           </div>
         </div>
 

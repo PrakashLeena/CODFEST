@@ -80,7 +80,7 @@ export interface Announcement {
   created_at: string;
 }
 
-export const MAP_POOL = ["Crash", "Crossfire", "Backlot", "Strike", "District"];
+export const MAP_POOL = ["Crash", "Backlot", "Strike", "Crossfire", "District", "Killhouse"];
 
 export const ROUND_NAMES: Record<number, string> = {
   1: "Round of 16",

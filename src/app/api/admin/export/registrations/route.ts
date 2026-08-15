@@ -72,23 +72,36 @@ export async function GET() {
     const teamMemberRows = (teams ?? []).map((t: any, i: number) => {
       const captain = t.captain_id ? userMap.get(t.captain_id) : null;
       const teamPlayers = playersByTeam.get(t.id) ?? [];
+      const leaderName = captain?.name ?? t.captain_name ?? "—";
+      const leaderEmail = captain?.email ?? t.email ?? "—";
+      const leaderPhone = t.phone ?? "—";
+      const leaderGameId = t.game_id ?? "—";
+      const leaderIm = t.im_number ?? "—";
 
       const row: Record<string, string | number> = {
         "#": i + 1,
         "Team Name": t.team_name ?? "—",
         "Status": String(t.status ?? "pending").toUpperCase(),
-        "Captain Name": captain?.name ?? t.captain_name ?? "—",
-        "Captain Email": captain?.email ?? t.email ?? "—",
-        "Phone": t.phone ?? "—",
+        "Captain Name": leaderName,
+        "Captain Email": leaderEmail,
+        "Phone": leaderPhone,
         "Discord": t.discord ?? "—",
         "WhatsApp": t.whatsapp ?? "—",
-        "Total Members": teamPlayers.length,
+        "Total Members": teamPlayers.length + 1,
         "Registered On": fmtDate(t.created_at),
       };
 
-      // Inline member columns M1…M6
-      for (let m = 0; m < MAX_MEMBERS; m++) {
-        const p = teamPlayers[m];
+      // M1 is the Team Leader
+      row["M1 Name"]   = leaderName;
+      row["M1 IGN"]    = leaderGameId;
+      row["M1 Email"]  = leaderEmail;
+      row["M1 Phone"]  = leaderPhone;
+      row["M1 IM No."] = leaderIm;
+      row["M1 Role"]   = "Leader (Captain)";
+
+      // Inline member columns M2…M6
+      for (let m = 1; m < MAX_MEMBERS; m++) {
+        const p = teamPlayers[m - 1];
         const prefix = `M${m + 1}`;
         if (p) {
           row[`${prefix} Name`]   = p.player_name ?? "—";
@@ -115,7 +128,25 @@ export async function GET() {
     let mIdx = 1;
 
     for (const t of teams ?? []) {
+      const captain = t.captain_id ? userMap.get(t.captain_id) : null;
       const teamPlayers = playersByTeam.get(t.id) ?? [];
+      const leaderName = captain?.name ?? t.captain_name ?? "—";
+      const leaderEmail = captain?.email ?? t.email ?? "—";
+
+      // 1st member: Team Leader
+      memberRows.push({
+        "#": mIdx++,
+        "Team Name": t.team_name ?? "—",
+        "Team Status": String(t.status ?? "pending").toUpperCase(),
+        "Member Name": leaderName,
+        "In-Game ID (IGN)": t.game_id ?? "—",
+        "Email": leaderEmail,
+        "Phone": t.phone ?? "—",
+        "IM Number": t.im_number ?? "—",
+        "Role": "Leader (Captain)",
+      });
+
+      // Remaining members
       for (const p of teamPlayers) {
         memberRows.push({
           "#": mIdx++,
@@ -137,12 +168,14 @@ export async function GET() {
     for (const t of teams ?? []) {
       const captain = t.captain_id ? userMap.get(t.captain_id) : null;
       const teamPlayers = playersByTeam.get(t.id) ?? [];
+      const leaderName = captain?.name ?? t.captain_name ?? "—";
+      const leaderEmail = captain?.email ?? t.email ?? "—";
 
       // Team header row
       rosterRows.push({
         "Team": `▶  ${String(t.team_name).toUpperCase()}`,
         "Status": String(t.status ?? "pending").toUpperCase(),
-        "Captain": captain?.name ? `${captain.name} (${captain.email})` : t.email || "—",
+        "Captain": leaderName ? `${leaderName} (${leaderEmail})` : t.email || "—",
         "Phone": t.phone || "—",
         "Discord": t.discord || "—",
         "#": "",
@@ -154,26 +187,31 @@ export async function GET() {
         "Role": "",
       });
 
-      if (teamPlayers.length === 0) {
+      // 1. Leader row as #1
+      rosterRows.push({
+        "Team": "", "Status": "", "Captain": "", "Phone": "", "Discord": "",
+        "#": "1",
+        "Member Name": leaderName,
+        "IGN": t.game_id || "—",
+        "Member Email": leaderEmail,
+        "Member Phone": t.phone || "—",
+        "IM Number": t.im_number || "—",
+        "Role": "Leader (Captain)",
+      });
+
+      // 2. Member rows
+      teamPlayers.forEach((p, pIdx) => {
         rosterRows.push({
           "Team": "", "Status": "", "Captain": "", "Phone": "", "Discord": "",
-          "#": "", "Member Name": "— no players registered yet —",
-          "IGN": "", "Member Email": "", "Member Phone": "", "IM Number": "", "Role": "",
+          "#": String(pIdx + 2),
+          "Member Name": p.player_name ?? "—",
+          "IGN": p.game_id || "—",
+          "Member Email": p.email || "—",
+          "Member Phone": p.phone || "—",
+          "IM Number": p.im_number || "—",
+          "Role": p.is_substitute ? "Substitute" : "Main Roster",
         });
-      } else {
-        teamPlayers.forEach((p, pIdx) => {
-          rosterRows.push({
-            "Team": "", "Status": "", "Captain": "", "Phone": "", "Discord": "",
-            "#": String(pIdx + 1),
-            "Member Name": p.player_name ?? "—",
-            "IGN": p.game_id || "—",
-            "Member Email": p.email || "—",
-            "Member Phone": p.phone || "—",
-            "IM Number": p.im_number || "—",
-            "Role": p.is_substitute ? "Substitute" : "Main Roster",
-          });
-        });
-      }
+      });
 
       // Blank spacer row
       rosterRows.push({

@@ -58,7 +58,10 @@ export default function TeamsPage() {
             <Link key={t.id} href={`/teams/${t.id}`} className="card p-5 transition hover:border-ember-600/50">
               <TeamMark name={t.team_name} logoUrl={t.logo_url} size={44} />
               <div className="mt-3 text-xs text-zinc-500">
-                Captain: <span className="text-zinc-300">{t.captain?.name ?? "—"}</span>
+                Leader: <span className="text-zinc-200 font-semibold">{t.captain?.name ?? "—"}</span>
+              </div>
+              <div className="mt-1 text-[11px] font-mono text-zinc-500">
+                Squad: <span className="text-ember-400 font-bold">5 Members</span>
               </div>
               <div className="mt-3 flex gap-4 text-sm">
                 <span className="text-ember-500">{t.wins}W</span>
