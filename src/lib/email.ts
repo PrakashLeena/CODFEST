@@ -457,3 +457,204 @@ export async function sendWelcomeEmail({
 
   return error?.message ?? null;
 }
+
+interface EliminationEmailProps {
+  name: string;
+  teamName: string;
+  customMessage?: string | null;
+  wins?: number;
+  losses?: number;
+  draws?: number;
+  stage?: string;
+}
+
+function getEliminationEmailHtml({
+  name,
+  teamName,
+  customMessage,
+  wins = 0,
+  losses = 1,
+  draws = 0,
+  stage = "Tournament Knockout Stage",
+}: EliminationEmailProps): string {
+  const escapedName = escapeHtml(name || "Team Captain");
+  const escapedTeamName = escapeHtml(teamName || "Your Squad");
+  const escapedStage = escapeHtml(stage);
+  const defaultBody = "Thank you for participating in CODFEST. Your team put up a fierce fight with tremendous skill, teamwork, and sportsmanship. Although your tournament run has concluded, we deeply appreciate your passion and energy!";
+  const bodyText = customMessage ? escapeHtml(customMessage) : defaultBody;
+
+  return `<!DOCTYPE html>
+<html lang="en" xmlns="http://www.w3.org/1999/xhtml" xmlns:v="urn:schemas-microsoft-com:vml" xmlns:o="urn:schemas-microsoft-com:office:office">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta http-equiv="X-UA-Compatible" content="IE=edge">
+<title>CODFEST — Tournament Status Update</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap');
+  body, table, td, a { -webkit-text-size-adjust: 100%; -ms-text-size-adjust: 100%; }
+  table, td { mso-table-lspace: 0pt; mso-table-rspace: 0pt; }
+  img { -ms-interpolation-mode: bicubic; border: 0; height: auto; line-height: 100%; outline: none; text-decoration: none; }
+  body { margin: 0; padding: 0; width: 100% !important; height: 100% !important; background-color: #0f1117; font-family: 'Poppins', Arial, Helvetica, sans-serif; }
+  @media only screen and (max-width: 600px) {
+    .container { width: 100% !important; }
+    .fluid { max-width: 100% !important; height: auto !important; }
+    .px-24 { padding-left: 20px !important; padding-right: 20px !important; }
+  }
+</style>
+</head>
+<body style="margin:0; padding:0; background-color:#0f1117;">
+  <center style="width:100%; background-color:#0f1117;">
+    <table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="background-color:#0f1117;">
+      <tr>
+        <td style="padding: 32px 16px;">
+          <table role="presentation" cellpadding="0" cellspacing="0" width="600" class="container" align="center" style="max-width:600px; margin:0 auto; background-color:#161922; border-radius:16px; overflow:hidden; border:1px solid #2a2f42;">
+
+            <!-- Header / Logo -->
+            <tr>
+              <td align="center" style="background-color:#090a0f; padding: 32px 24px;" class="px-24">
+                <img src="https://cdn.jsdelivr.net/gh/PrakashLeena/CODFEST@latest/public/logo.png" alt="CODFEST Logo" width="160" class="fluid" style="display:block; width:160px; max-width:60%; height:auto; margin:0 auto;">
+              </td>
+            </tr>
+
+            <!-- Tournament Accent Band -->
+            <tr>
+              <td align="center" style="background-color:#f97316; padding: 14px 24px;" class="px-24">
+                <p style="margin:0; font-family:'Poppins', Arial, sans-serif; font-size:12px; font-weight:800; letter-spacing:2px; text-transform:uppercase; color:#000000;">
+                  Official Tournament Notice // Elimination Update
+                </p>
+              </td>
+            </tr>
+
+            <!-- Main Body -->
+            <tr>
+              <td class="px-24" style="padding: 36px 36px 20px 36px;">
+                <h1 style="margin:0 0 16px 0; font-family:'Poppins', Arial, sans-serif; font-size:24px; font-weight:800; color:#ffffff; line-height:1.3;">
+                  Gg, ${escapedTeamName}!
+                </h1>
+                <p style="margin:0 0 16px 0; font-family:'Poppins', Arial, sans-serif; font-size:14px; line-height:1.7; color:#cbd5e1;">
+                  Dear <strong>${escapedName}</strong> and Squad Members of <strong>${escapedTeamName}</strong>,
+                </p>
+                <div style="background-color:#1e2330; border-left:4px solid #f97316; border-radius:8px; padding:18px; margin:20px 0; font-size:14px; line-height:1.7; color:#e2e8f0;">
+                  ${bodyText}
+                </div>
+              </td>
+            </tr>
+
+            <!-- Team Tournament Summary Card -->
+            <tr>
+              <td class="px-24" style="padding: 0 36px 28px 36px;">
+                <table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="background-color:#10131b; border-radius:12px; border:1px solid #2a2f42; padding: 18px;">
+                  <tr>
+                    <td style="padding: 8px 12px; font-family:'Poppins', Arial, sans-serif; font-size:12px; color:#94a3b8;">
+                      <strong style="color:#ffffff;">Team:</strong> ${escapedTeamName}
+                    </td>
+                    <td style="padding: 8px 12px; font-family:'Poppins', Arial, sans-serif; font-size:12px; color:#94a3b8; text-align:right;">
+                      <strong style="color:#ffffff;">Stage:</strong> ${escapedStage}
+                    </td>
+                  </tr>
+                  <tr>
+                    <td colspan="2" style="padding: 12px 12px 6px 12px; border-top: 1px solid #1e2330;">
+                      <table role="presentation" cellpadding="0" cellspacing="0" width="100%">
+                        <tr>
+                          <td align="center" style="font-family:'Poppins', Arial, sans-serif;">
+                            <span style="display:block; font-size:18px; font-weight:800; color:#22c55e;">${wins}</span>
+                            <span style="font-size:10px; text-transform:uppercase; color:#64748b; font-weight:700;">Wins</span>
+                          </td>
+                          <td align="center" style="font-family:'Poppins', Arial, sans-serif;">
+                            <span style="display:block; font-size:18px; font-weight:800; color:#ef4444;">${losses}</span>
+                            <span style="font-size:10px; text-transform:uppercase; color:#64748b; font-weight:700;">Losses</span>
+                          </td>
+                          <td align="center" style="font-family:'Poppins', Arial, sans-serif;">
+                            <span style="display:block; font-size:18px; font-weight:800; color:#94a3b8;">${draws}</span>
+                            <span style="font-size:10px; text-transform:uppercase; color:#64748b; font-weight:700;">Draws</span>
+                          </td>
+                        </tr>
+                      </table>
+                    </td>
+                  </tr>
+                </table>
+              </td>
+            </tr>
+
+            <!-- CTA / Leaderboard Link -->
+            <tr>
+              <td align="center" class="px-24" style="padding: 0 36px 32px 36px;">
+                <a href="https://codfest.imssa.lk/leaderboard" style="display:inline-block; background-color:#f97316; color:#ffffff; font-family:'Poppins', Arial, sans-serif; font-size:13px; font-weight:700; text-decoration:none; padding:12px 28px; border-radius:8px; text-transform:uppercase; letter-spacing:1px;">
+                  View Full Tournament Standings
+                </a>
+              </td>
+            </tr>
+
+            <!-- Footer -->
+            <tr>
+              <td align="center" class="px-24" style="padding: 24px 36px; background-color:#090a0f; border-top:1px solid #1e2330;">
+                <p style="margin:0 0 6px 0; font-family:'Poppins', Arial, sans-serif; font-size:11px; color:#64748b;">
+                  Organized by Industrial Management Science Students Association (IMSSA)
+                </p>
+                <p style="margin:0; font-family:'Poppins', Arial, sans-serif; font-size:11px; color:#64748b;">
+                  University of Kelaniya &middot; <a href="https://codfest.imssa.lk/" style="color:#f97316; text-decoration:none;">codfest.imssa.lk</a>
+                </p>
+              </td>
+            </tr>
+
+          </table>
+        </td>
+      </tr>
+    </table>
+  </center>
+</body>
+</html>`;
+}
+
+/**
+ * Sends official tournament elimination notification email to a team captain or members.
+ */
+export async function sendEliminationEmail({
+  to,
+  name,
+  teamName,
+  customMessage,
+  wins = 0,
+  losses = 1,
+  draws = 0,
+  stage = "Tournament Knockout Stage",
+}: {
+  to: string;
+  name: string;
+  teamName: string;
+  customMessage?: string | null;
+  wins?: number;
+  losses?: number;
+  draws?: number;
+  stage?: string;
+}): Promise<string | null> {
+  if (isOtpTestMode()) {
+    console.info(`[OTP_TEST_MODE] Skipping elimination email to ${to} (${name} - ${teamName}).`);
+    return null;
+  }
+
+  const from = process.env.EMAIL_FROM || "onboarding@resend.dev";
+
+  try {
+    const { error } = await resendClient().emails.send({
+      from,
+      to,
+      subject: `CODFEST Tournament Update — ${teamName}`,
+      html: getEliminationEmailHtml({
+        name,
+        teamName,
+        customMessage,
+        wins,
+        losses,
+        draws,
+        stage,
+      }),
+    });
+    return error?.message ?? null;
+  } catch (e: any) {
+    console.error("[sendEliminationEmail error]", e);
+    return e?.message || "Failed to send email";
+  }
+}
+

@@ -674,7 +674,11 @@ export default function LeaderboardPage() {
           </div>
 
           <div className="font-mono text-xs text-zinc-400">
-            {viewMode === "standings" ? "Ranking by Team Score" : "Auto-Calculated by Total Player Kills"}
+            {viewMode === "standings"
+              ? division === "all"
+                ? "Ranking by Team Cumulative Score"
+                : `Ranking strictly by Match Wins & Losses (${division === "boys" ? "Boys" : "Girls"} Division)`
+              : "Auto-Calculated by Total Player Kills"}
           </div>
         </div>
 
@@ -960,15 +964,15 @@ export default function LeaderboardPage() {
             <div>
               <h2 className="section-title text-lg sm:text-xl">
                 {division === "boys"
-                  ? "Boys Division Standings"
+                  ? "Boys Division Standings (Ranked by W-L Record)"
                   : division === "girls"
-                  ? "Girls Division Standings"
+                  ? "Girls Division Standings (Ranked by W-L Record)"
                   : "Overall Team Standings"}
               </h2>
               <p className="font-mono text-xs text-zinc-400">
                 {division === "all"
-                  ? "Showing all registered teams across all divisions"
-                  : `Filtered by ${division === "boys" ? "Boys" : "Girls"} Division`}
+                  ? "Showing all registered teams across all divisions (ranked by cumulative player score)"
+                  : `Official ${division === "boys" ? "Boys" : "Girls"} division standings ranked strictly by Match Wins and Losses (W–L Record)`}
               </p>
             </div>
             <span className="font-mono text-xs text-zinc-400">

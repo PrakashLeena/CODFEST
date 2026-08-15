@@ -148,6 +148,54 @@ function compareTeamsByScore(a: any, b: any) {
   return a.team_name.localeCompare(b.team_name);
 }
 
+/**
+ * Helper comparator that strictly assigns team position in Boys and Girls divisions
+ * based ONLY on match WINS and LOSSES (not points).
+ * 1. Custom display order (if manually set by admin)
+ * 2. Wins (descending - higher wins is better)
+ * 3. Losses (ascending - fewer losses is better)
+ * 4. Win Rate % (descending)
+ * 5. Map differential (descending)
+ * 6. Maps Won (descending)
+ * 7. Alphabetical fallback
+ */
+export function compareTeamsByRecord(a: any, b: any) {
+  // Custom manual order set by admin takes precedence if configured
+  const ordA = a.display_order ?? null;
+  const ordB = b.display_order ?? null;
+  if (ordA !== null && ordB !== null) return ordA - ordB;
+  if (ordA !== null) return -1;
+  if (ordB !== null) return 1;
+
+  // 1. Wins (descending - most wins first)
+  const winsA = Number(a.wins) || 0;
+  const winsB = Number(b.wins) || 0;
+  if (winsB !== winsA) return winsB - winsA;
+
+  // 2. Losses (ascending - fewest losses is ranked higher)
+  const lossesA = Number(a.losses) || 0;
+  const lossesB = Number(b.losses) || 0;
+  if (lossesA !== lossesB) return lossesA - lossesB;
+
+  // 3. Win rate (descending)
+  const winRateA = Number(a.win_rate) || 0;
+  const winRateB = Number(b.win_rate) || 0;
+  if (winRateB !== winRateA) return winRateB - winRateA;
+
+  // 4. Map differential (descending)
+  const diffA = (Number(a.maps_won) || 0) - (Number(a.maps_lost) || 0);
+  const diffB = (Number(b.maps_won) || 0) - (Number(b.maps_lost) || 0);
+  if (diffB !== diffA) return diffB - diffA;
+
+  // 5. Maps won (descending)
+  const mapsWonA = Number(a.maps_won) || 0;
+  const mapsWonB = Number(b.maps_won) || 0;
+  if (mapsWonB !== mapsWonA) return mapsWonB - mapsWonA;
+
+  // 6. Alphabetical fallback
+  return (a.team_name || "").localeCompare(b.team_name || "");
+}
+
 export async function getLeaderboard() {
   const [{ data }, settings] = await Promise.all([
     db()
@@ -320,7 +368,7 @@ export async function getTopKillers() {
 
 /**
  * Returns the overall leaderboard plus automatically ranked Boys and Girls divisions
- * separately, each ordered strictly by cumulative player score and performance,
+ * separately, each ordered strictly by match WINS and LOSSES (not points),
  * along with the most lethal killer statistics for both divisions.
  */
 export async function getLeaderboardSplits() {
@@ -336,16 +384,26 @@ export async function getLeaderboardSplits() {
   ]);
 
   const teamCategories: Record<string, "boys" | "girls"> = settings.team_categories ?? {};
+  const boysTeamOrders: Record<string, number> = settings.boys_team_orders ?? {};
+  const girlsTeamOrders: Record<string, number> = settings.girls_team_orders ?? {};
+  const teamOrders: Record<string, number> = settings.team_orders ?? {};
 
   const allTeams = (data ?? []).map((t) => {
     const category: "boys" | "girls" = teamCategories[t.id] ?? "boys";
-    const played = t.wins + t.losses + t.draws;
-    const win_rate = played ? Math.round((t.wins / played) * 100) : 0;
+    const played = (t.wins || 0) + (t.losses || 0) + (t.draws || 0);
+    const win_rate = played ? Math.round(((t.wins || 0) / played) * 100) : 0;
+    const boysOrder = typeof boysTeamOrders[t.id] === "number" ? boysTeamOrders[t.id] : null;
+    const girlsOrder = typeof girlsTeamOrders[t.id] === "number" ? girlsTeamOrders[t.id] : null;
+    const generalOrder = typeof teamOrders[t.id] === "number" ? teamOrders[t.id] : null;
+
     return {
       ...t,
       category,
       played,
       win_rate,
+      boys_order: boysOrder,
+      girls_order: girlsOrder,
+      display_order: category === "girls" ? (girlsOrder ?? generalOrder) : (boysOrder ?? generalOrder),
     };
   });
 
@@ -353,16 +411,18 @@ export async function getLeaderboardSplits() {
     .sort(compareTeamsByScore)
     .map((t, idx) => ({ ...t, rank: idx + 1 }));
 
-  // Automatically rank Boys division separately using player score
+  // Automatically rank Boys division strictly by WINS and LOSSES (not points)
   const boysLeaderboard = allTeams
     .filter((t) => (t.category ?? "boys") === "boys")
-    .sort(compareTeamsByScore)
+    .map((t) => ({ ...t, display_order: t.boys_order }))
+    .sort(compareTeamsByRecord)
     .map((t, idx) => ({ ...t, rank: idx + 1 }));
 
-  // Automatically rank Girls division separately using player score
+  // Automatically rank Girls division strictly by WINS and LOSSES (not points)
   const girlsLeaderboard = allTeams
     .filter((t) => t.category === "girls")
-    .sort(compareTeamsByScore)
+    .map((t) => ({ ...t, display_order: t.girls_order }))
+    .sort(compareTeamsByRecord)
     .map((t, idx) => ({ ...t, rank: idx + 1 }));
 
   return {

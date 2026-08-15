@@ -623,6 +623,308 @@ function SquadModal({ isOpen, onClose, onSaved, allTeams = [], editingTeam = nul
   );
 }
 
+/* ------------------------------------------------------------------ */
+/* NOTIFY ELIMINATED TEAM MODAL                                        */
+/* ------------------------------------------------------------------ */
+
+interface NotifyEliminatedModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  allTeams?: any[];
+  preselectedTeamId?: string | null;
+  onSent?: () => void;
+}
+
+function NotifyEliminatedModal({
+  isOpen,
+  onClose,
+  allTeams = [],
+  preselectedTeamId = null,
+  onSent,
+}: NotifyEliminatedModalProps) {
+  const [targetMode, setTargetMode] = useState<"single" | "all">("single");
+  const [selectedTeamId, setSelectedTeamId] = useState<string>("");
+  const [divisionFilter, setDivisionFilter] = useState<"all" | "boys" | "girls">("all");
+  const [stage, setStage] = useState("Tournament Knockout Stage");
+  const [customMessage, setCustomMessage] = useState(
+    "Thank you for participating in CODFEST. Your team put up a fierce fight with tremendous skill, teamwork, and sportsmanship. Although your tournament run has concluded, we deeply appreciate your passion and energy!"
+  );
+  const [postAnnouncement, setPostAnnouncement] = useState(false);
+  const [announcementTitle, setAnnouncementTitle] = useState("Tournament Update: Elimination Notice");
+  const [busy, setBusy] = useState(false);
+  const [statusMsg, setStatusMsg] = useState<{ type: "success" | "error"; text: string } | null>(null);
+
+  useEffect(() => {
+    if (preselectedTeamId) {
+      setSelectedTeamId(preselectedTeamId);
+      setTargetMode("single");
+    } else if (allTeams.length > 0 && !selectedTeamId) {
+      const firstEliminated = allTeams.find((t) => (t.losses || 0) > 0) || allTeams[0];
+      if (firstEliminated) setSelectedTeamId(firstEliminated.id);
+    }
+  }, [preselectedTeamId, allTeams]);
+
+  if (!isOpen) return null;
+
+  const eliminatedCandidates = allTeams.filter((t) => {
+    const matchesDiv = divisionFilter === "all" || (t.category ?? "boys") === divisionFilter;
+    const hasLosses = (t.losses || 0) > 0;
+    return matchesDiv && hasLosses;
+  });
+
+  const selectedTeamObj = allTeams.find((t) => t.id === selectedTeamId);
+
+  const handleSend = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setBusy(true);
+    setStatusMsg(null);
+
+    try {
+      const payload = {
+        team_id: targetMode === "single" ? selectedTeamId : undefined,
+        all_eliminated: targetMode === "all",
+        division: divisionFilter,
+        custom_message: customMessage.trim() || undefined,
+        stage: stage.trim() || "Tournament Knockout Stage",
+        create_announcement: postAnnouncement,
+        announcement_title: announcementTitle.trim() || undefined,
+      };
+
+      const res = await fetch("/api/admin/teams/notify-eliminated", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+
+      const json = await res.json();
+      if (!res.ok) {
+        setStatusMsg({ type: "error", text: json.error || "Failed to send notifications." });
+      } else {
+        setStatusMsg({
+          type: "success",
+          text: `Elimination notice successfully sent to ${json.successful_count} team(s)!`,
+        });
+        if (onSent) onSent();
+        setTimeout(() => {
+          onClose();
+          setStatusMsg(null);
+        }, 2200);
+      }
+    } catch (err: any) {
+      setStatusMsg({ type: "error", text: err?.message || "Network error while sending notification." });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-night-950/80 backdrop-blur-sm overflow-y-auto">
+      <div className="relative w-full max-w-2xl rounded-2xl border border-red-500/40 bg-gradient-to-b from-night-900 via-night-900 to-night-950 p-6 shadow-2xl">
+        {/* HEADER */}
+        <div className="flex items-center justify-between border-b border-night-800 pb-4">
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-red-500/40 bg-red-600/20 text-red-400">
+              <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+              </svg>
+            </div>
+            <div>
+              <h2 className="font-display text-lg font-bold uppercase tracking-wider text-white">
+                Notify Eliminated Team(s)
+              </h2>
+              <p className="font-mono text-xs text-zinc-400">
+                Send official tournament elimination notice & appreciation email to team captains
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={onClose}
+            className="rounded-lg p-1 text-zinc-400 hover:bg-night-800 hover:text-white"
+          >
+            ✕
+          </button>
+        </div>
+
+        {statusMsg && (
+          <div
+            className={`mt-4 rounded-xl border px-4 py-3 font-mono text-xs ${
+              statusMsg.type === "success"
+                ? "border-green-500/40 bg-green-500/10 text-green-300"
+                : "border-red-500/40 bg-red-500/10 text-red-300"
+            }`}
+          >
+            {statusMsg.text}
+          </div>
+        )}
+
+        <form onSubmit={handleSend} className="mt-6 space-y-5">
+          {/* TARGET SELECTION MODE */}
+          <div>
+            <label className="label">Notification Target</label>
+            <div className="grid grid-cols-2 gap-3">
+              <button
+                type="button"
+                onClick={() => setTargetMode("single")}
+                className={`p-3 rounded-xl border font-mono text-xs font-bold text-left transition-all ${
+                  targetMode === "single"
+                    ? "border-red-500/60 bg-red-600/20 text-white shadow-[0_0_15px_rgba(239,68,68,0.2)]"
+                    : "border-night-700 bg-night-850 text-zinc-400 hover:text-white"
+                }`}
+              >
+                <div className="text-white font-bold">Single Team</div>
+                <div className="text-[11px] text-zinc-400 font-normal mt-0.5">
+                  Select a specific eliminated squad
+                </div>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setTargetMode("all")}
+                className={`p-3 rounded-xl border font-mono text-xs font-bold text-left transition-all ${
+                  targetMode === "all"
+                    ? "border-red-500/60 bg-red-600/20 text-white shadow-[0_0_15px_rgba(239,68,68,0.2)]"
+                    : "border-night-700 bg-night-850 text-zinc-400 hover:text-white"
+                }`}
+              >
+                <div className="text-white font-bold">
+                  All Eliminated Teams ({eliminatedCandidates.length})
+                </div>
+                <div className="text-[11px] text-zinc-400 font-normal mt-0.5">
+                  Auto-notify all teams with losses
+                </div>
+              </button>
+            </div>
+          </div>
+
+          {/* DIVISION FILTER */}
+          {targetMode === "all" && (
+            <div>
+              <label className="label">Filter Division</label>
+              <div className="flex gap-2">
+                {(["all", "boys", "girls"] as const).map((div) => (
+                  <button
+                    key={div}
+                    type="button"
+                    onClick={() => setDivisionFilter(div)}
+                    className={`px-3 py-1.5 rounded-lg font-mono text-xs font-bold capitalize transition-colors ${
+                      divisionFilter === div
+                        ? "bg-red-500/20 text-red-300 border border-red-500/40"
+                        : "bg-night-800 text-zinc-400 hover:text-white border border-night-700"
+                    }`}
+                  >
+                    {div === "all" ? "All Divisions" : `${div} Division`}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* SINGLE TEAM SELECTOR */}
+          {targetMode === "single" && (
+            <div>
+              <label className="label">Select Team to Notify</label>
+              <select
+                value={selectedTeamId}
+                onChange={(e) => setSelectedTeamId(e.target.value)}
+                required
+                className="input font-semibold"
+              >
+                <option value="" disabled>-- Select an eliminated team --</option>
+                {allTeams.map((t) => {
+                  const isElim = (t.losses || 0) > 0;
+                  return (
+                    <option key={t.id} value={t.id}>
+                      {t.category === "girls" ? "[GIRLS] " : "[BOYS] "}
+                      {t.team_name} (W: {t.wins || 0}, L: {t.losses || 0}) {isElim ? " — [Eliminated]" : ""}
+                    </option>
+                  );
+                })}
+              </select>
+
+              {selectedTeamObj && (
+                <div className="mt-2 flex items-center justify-between bg-night-850 p-2.5 rounded-lg border border-night-800 font-mono text-xs text-zinc-400">
+                  <span>Captain: <strong className="text-zinc-200">{selectedTeamObj.captain?.name || "—"}</strong></span>
+                  <span>Email: <strong className="text-zinc-200">{selectedTeamObj.captain?.email || selectedTeamObj.email || "—"}</strong></span>
+                  <span>Record: <strong className="text-red-400">{selectedTeamObj.wins || 0}W - {selectedTeamObj.losses || 0}L</strong></span>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* TOURNAMENT STAGE */}
+          <div>
+            <label className="label">Tournament Stage / Round</label>
+            <input
+              type="text"
+              value={stage}
+              onChange={(e) => setStage(e.target.value)}
+              placeholder="e.g. Round 1 (Round of 16), Quarter-Finals, Semi-Finals"
+              className="input font-mono text-xs"
+            />
+          </div>
+
+          {/* CUSTOM APPRECIATION / ELIMINATION MESSAGE */}
+          <div>
+            <label className="label">Notice & Appreciation Message (Sent in Email)</label>
+            <textarea
+              value={customMessage}
+              onChange={(e) => setCustomMessage(e.target.value)}
+              rows={4}
+              maxLength={2000}
+              className="input font-mono text-xs min-h-[100px]"
+              placeholder="Enter custom encouragement or tournament feedback for the team..."
+            />
+          </div>
+
+          {/* OPTIONAL PUBLIC ANNOUNCEMENT POST */}
+          <div className="rounded-xl border border-night-700 bg-night-850 p-3.5 space-y-3">
+            <label className="flex items-center gap-2.5 cursor-pointer font-mono text-xs text-zinc-300">
+              <input
+                type="checkbox"
+                checked={postAnnouncement}
+                onChange={(e) => setPostAnnouncement(e.target.checked)}
+                className="h-4 w-4 rounded border-night-600 bg-night-900 text-red-500 focus:ring-0"
+              />
+              <span className="font-bold">Also publish appreciation post to public Announcements tab</span>
+            </label>
+
+            {postAnnouncement && (
+              <div>
+                <input
+                  type="text"
+                  value={announcementTitle}
+                  onChange={(e) => setAnnouncementTitle(e.target.value)}
+                  placeholder="Announcement title"
+                  className="input !py-1.5 font-mono text-xs"
+                />
+              </div>
+            )}
+          </div>
+
+          {/* ACTIONS */}
+          <div className="flex items-center justify-end gap-3 border-t border-night-800 pt-4">
+            <button
+              type="button"
+              onClick={onClose}
+              className="btn-ghost !py-2 text-xs"
+              disabled={busy}
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={busy || (targetMode === "single" && !selectedTeamId)}
+              className="btn-primary !bg-red-600 hover:!bg-red-500 !border-red-500/50 !py-2.5 px-6 font-mono text-xs font-bold shadow-[0_0_15px_rgba(239,68,68,0.3)]"
+            >
+              {busy ? "Sending Notices..." : targetMode === "all" ? `Notify All (${eliminatedCandidates.length}) Eliminated Teams` : "Send Elimination Notice"}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
 function RegistrationsPanel({ onDownloadExcel, exporting }: { onDownloadExcel?: () => void; exporting?: boolean }) {
   const [teams, setTeams] = useState<any[]>([]);
   const [localDownloading, setLocalDownloading] = useState(false);
@@ -969,6 +1271,8 @@ function LeaderboardControlPanel() {
   // Quick standings edit modal or state
   const [editingStandings, setEditingStandings] = useState<Record<string, Partial<TeamWithRoster>>>({});
   const [standingsBusy, setStandingsBusy] = useState<Record<string, boolean>>({});
+  const [showNotifyModal, setShowNotifyModal] = useState(false);
+  const [notifyTeamId, setNotifyTeamId] = useState<string | null>(null);
 
   const loadData = useCallback(async () => {
     try {
@@ -1117,23 +1421,9 @@ function LeaderboardControlPanel() {
   // Helper row mutations
   const updateTeam1Row = (index: number, field: keyof PlayerStatRow, val: any) => {
     setTeam1Players((prev) => {
-      const next = [...prev];
-      next[index] = {
-        ...next[index],
-        [field]: field === "name" ? val : val === "" ? "" : isNaN(Number(val)) ? val : Number(val),
-      };
-      return next;
-    });
-  };
-
-  const updateTeam2Row = (index: number, field: keyof PlayerStatRow, val: any) => {
-    setTeam2Players((prev) => {
-      const next = [...prev];
-      next[index] = {
-        ...next[index],
-        [field]: field === "name" ? val : val === "" ? "" : isNaN(Number(val)) ? val : Number(val),
-      };
-      return next;
+      const copy = [...prev];
+      copy[index] = { ...copy[index], [field]: val };
+      return copy;
     });
   };
 
@@ -1144,6 +1434,14 @@ function LeaderboardControlPanel() {
   const removeTeam1Row = (index: number) => {
     if (team1Players.length <= 1) return;
     setTeam1Players((p) => p.filter((_, i) => i !== index));
+  };
+
+  const updateTeam2Row = (index: number, field: keyof PlayerStatRow, val: any) => {
+    setTeam2Players((prev) => {
+      const copy = [...prev];
+      copy[index] = { ...copy[index], [field]: val };
+      return copy;
+    });
   };
 
   const addTeam2Row = () => {
@@ -1328,10 +1626,23 @@ function LeaderboardControlPanel() {
       if (ordA !== null && ordB !== null) return ordA - ordB;
       if (ordA !== null) return -1;
       if (ordB !== null) return 1;
+
+      // When viewing Boys or Girls division, sort strictly by wins and losses (not points)
+      if (adminDivision === "boys" || adminDivision === "girls") {
+        return (
+          (b.wins || 0) - (a.wins || 0) ||
+          (a.losses || 0) - (b.losses || 0) ||
+          ((b.maps_won || 0) - (b.maps_lost || 0)) - ((a.maps_won || 0) - (a.maps_lost || 0)) ||
+          (b.maps_won || 0) - (a.maps_won || 0) ||
+          (a.team_name || "").localeCompare(b.team_name || "")
+        );
+      }
+
       return (
         b.points - a.points ||
         (b.maps_won - b.maps_lost) - (a.maps_won - a.maps_lost) ||
-        b.wins - a.wins
+        b.wins - a.wins ||
+        (a.team_name || "").localeCompare(b.team_name || "")
       );
     });
   }, [teams, adminDivision, standingsSearch]);
@@ -1448,6 +1759,18 @@ function LeaderboardControlPanel() {
 
   return (
     <div className="space-y-10">
+      {/* NOTIFY ELIMINATED TEAM MODAL */}
+      <NotifyEliminatedModal
+        isOpen={showNotifyModal}
+        onClose={() => {
+          setShowNotifyModal(false);
+          setNotifyTeamId(null);
+        }}
+        allTeams={teams}
+        preselectedTeamId={notifyTeamId}
+        onSent={loadData}
+      />
+
       {/* TOP DIVISION SPLIT FILTER CONTROLS */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 rounded-2xl border border-night-700 bg-night-850 p-4 shadow-xl">
         <div className="flex items-center gap-3">
@@ -1457,11 +1780,23 @@ function LeaderboardControlPanel() {
               Division Filter & Maintenance
             </h2>
             <p className="font-mono text-[11px] text-zinc-400">
-              Manage Boys & Girls divisions and set custom standings ranking
+              Manage Boys & Girls divisions (ranked strictly by Wins & Losses) and set custom standings ranking
             </p>
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-2">
+          <button
+            onClick={() => {
+              setNotifyTeamId(null);
+              setShowNotifyModal(true);
+            }}
+            className="flex items-center gap-1.5 rounded-xl border border-red-500/60 bg-red-600/20 px-3.5 py-2 font-mono text-xs font-bold text-red-300 hover:bg-red-600/30 hover:text-white transition-all shadow-[0_0_15px_rgba(239,68,68,0.25)]"
+            title="Send official elimination appreciation email notice to eliminated teams"
+          >
+            <span className="text-red-400">✉</span>
+            <span>Notify Eliminated Teams</span>
+          </button>
+
           <button
             onClick={() => setAdminDivision("all")}
             className={`flex items-center gap-2 rounded-xl px-4 py-2 font-mono text-xs font-bold transition-all ${
@@ -1484,7 +1819,7 @@ function LeaderboardControlPanel() {
                 : "border border-night-700 bg-night-800 text-zinc-400 hover:text-white"
             }`}
           >
-            <span>Boys Division</span>
+            <span>Boys Division (W-L)</span>
             <span className="rounded-full bg-blue-950 px-2 py-0.5 text-[10px] text-blue-300 border border-blue-500/30">
               {boysCount}
             </span>
@@ -1498,7 +1833,7 @@ function LeaderboardControlPanel() {
                 : "border border-night-700 bg-night-800 text-zinc-400 hover:text-white"
             }`}
           >
-            <span>Girls Division</span>
+            <span>Girls Division (W-L)</span>
             <span className="rounded-full bg-pink-950 px-2 py-0.5 text-[10px] text-pink-300 border border-pink-500/30">
               {girlsCount}
             </span>
@@ -2606,15 +2941,28 @@ function LeaderboardControlPanel() {
                       />
                     </td>
                     <td className="py-2 px-3 text-right">
-                      {isModified && (
+                      <div className="flex items-center justify-end gap-1.5">
                         <button
-                          onClick={() => saveStandingsOverride(t.id)}
-                          disabled={busy}
-                          className="rounded bg-ember-600 px-3 py-1 font-bold text-white hover:bg-ember-500 text-xs transition-colors"
+                          type="button"
+                          onClick={() => {
+                            setNotifyTeamId(t.id);
+                            setShowNotifyModal(true);
+                          }}
+                          className="rounded border border-red-500/40 bg-red-600/10 px-2 py-1 font-mono text-[10px] font-bold text-red-300 hover:bg-red-600/25 transition-colors"
+                          title="Send elimination notice to this team"
                         >
-                          {busy ? "…" : "Save"}
+                          Notify
                         </button>
-                      )}
+                        {isModified && (
+                          <button
+                            onClick={() => saveStandingsOverride(t.id)}
+                            disabled={busy}
+                            className="rounded bg-ember-600 px-3 py-1 font-bold text-white hover:bg-ember-500 text-xs transition-colors"
+                          >
+                            {busy ? "…" : "Save"}
+                          </button>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 );
@@ -2725,6 +3073,11 @@ interface TeamFull {
   discord?:   string | null;
   whatsapp?:  string | null;
   created_at: string;
+  category?:  "boys" | "girls";
+  wins?:      number;
+  losses?:    number;
+  draws?:     number;
+  points?:    number;
   captain?:   { name: string; email: string } | null;
   players?:   { id: string; player_name: string; game_id?: string; is_substitute?: boolean }[];
 }
@@ -2737,6 +3090,8 @@ function TeamsControlPanel({ onDownloadExcel, exporting }: { onDownloadExcel?: (
   const [showModal,  setShowModal]  = useState(false);
   const [modalTeam,  setModalTeam]  = useState<any | null>(null);
   const [actionMsg,  setActionMsg]  = useState<string | null>(null);
+  const [showNotifyModal, setShowNotifyModal] = useState(false);
+  const [notifyTargetTeamId, setNotifyTargetTeamId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -2783,6 +3138,18 @@ function TeamsControlPanel({ onDownloadExcel, exporting }: { onDownloadExcel?: (
 
   return (
     <div className="space-y-6">
+      {/* NOTIFY ELIMINATED TEAM MODAL */}
+      <NotifyEliminatedModal
+        isOpen={showNotifyModal}
+        onClose={() => {
+          setShowNotifyModal(false);
+          setNotifyTargetTeamId(null);
+        }}
+        allTeams={teams}
+        preselectedTeamId={notifyTargetTeamId}
+        onSent={load}
+      />
+
       {/* SQUAD MANAGEMENT & EDIT MODAL */}
       <SquadModal
         isOpen={showModal}
@@ -2799,6 +3166,17 @@ function TeamsControlPanel({ onDownloadExcel, exporting }: { onDownloadExcel?: (
           <p className="font-mono text-xs text-zinc-400">Total registered teams: {teams.length}</p>
         </div>
         <div className="flex flex-wrap items-center gap-3">
+          <button
+            onClick={() => {
+              setNotifyTargetTeamId(null);
+              setShowNotifyModal(true);
+            }}
+            className="flex items-center gap-2 rounded-lg border border-red-500/60 bg-red-600/20 px-3.5 py-1.5 font-mono text-xs font-bold text-red-300 hover:bg-red-600/30 hover:text-white transition-all shadow-[0_0_15px_rgba(239,68,68,0.2)]"
+            title="Send official elimination appreciation email notice to eliminated teams"
+          >
+            <span>✉</span>
+            Notify Eliminated Teams
+          </button>
           <button
             onClick={openCreateModal}
             className="flex items-center gap-2 rounded-lg border border-amber-500/60 bg-amber-500/20 px-3.5 py-1.5 font-mono text-xs font-bold text-amber-300 hover:bg-amber-500/30 hover:text-white transition-all shadow-[0_0_15px_rgba(245,158,11,0.2)]"
@@ -2873,7 +3251,16 @@ function TeamsControlPanel({ onDownloadExcel, exporting }: { onDownloadExcel?: (
                 <div className="flex items-center gap-3 min-w-0">
                   <TeamMark name={t.team_name} logoUrl={t.logo_url} size={36} />
                   <div className="min-w-0">
-                    <div className="font-display font-bold text-white truncate">{t.team_name}</div>
+                    <div className="flex items-center gap-2">
+                      <span className="font-display font-bold text-white truncate">{t.team_name}</span>
+                      <span className={`rounded px-1.5 py-0.2 font-mono text-[9px] font-bold uppercase ${
+                        t.category === "girls"
+                          ? "border border-pink-500/40 bg-pink-500/10 text-pink-300"
+                          : "border border-blue-500/40 bg-blue-500/10 text-blue-300"
+                      }`}>
+                        {t.category === "girls" ? "GIRLS" : "BOYS"}
+                      </span>
+                    </div>
                     <div className="font-mono text-[11px] text-zinc-500 truncate">
                       Captain: {t.captain?.name ?? "—"} · {t.captain?.email ?? "—"}
                     </div>
@@ -2899,6 +3286,17 @@ function TeamsControlPanel({ onDownloadExcel, exporting }: { onDownloadExcel?: (
                       Reject
                     </button>
                   )}
+
+                  <button
+                    onClick={() => {
+                      setNotifyTargetTeamId(t.id);
+                      setShowNotifyModal(true);
+                    }}
+                    className="rounded border border-red-500/50 bg-red-600/15 px-3 py-1 font-mono text-xs font-bold text-red-300 hover:bg-red-600/25 transition-colors"
+                    title="Send elimination appreciation email notice to this team"
+                  >
+                    Notify Eliminated
+                  </button>
 
                   <button
                     onClick={() => openEditModal(t)}
