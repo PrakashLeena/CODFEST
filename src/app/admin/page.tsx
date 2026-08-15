@@ -385,7 +385,7 @@ function AddTeamModal({ isOpen, onClose, onCreated }: AddTeamModalProps) {
                 />
               </div>
               <div>
-                <label className="label">Mobile Number</label>
+                <label className="label">Mobile Number (Optional)</label>
                 <input
                   type="tel"
                   placeholder="e.g. 9876543210"

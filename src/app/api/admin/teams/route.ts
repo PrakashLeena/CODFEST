@@ -41,8 +41,8 @@ export async function GET() {
 const manualPlayerSchema = z.object({
   player_name: z.string().min(1).max(50),
   game_id: z.string().max(50).optional().default(""),
-  email: z.string().email().optional().or(z.literal("")),
-  phone: z.string().max(20).optional().default(""),
+  email: z.string().optional().default(""),
+  phone: z.string().max(30).optional().default(""),
   im_number: z.string().max(50).optional().default(""),
   is_substitute: z.boolean().default(false),
 });
@@ -50,8 +50,8 @@ const manualPlayerSchema = z.object({
 const manualTeamSchema = z.object({
   team_name: z.string().min(2).max(50),
   captain_name: z.string().min(2).max(60),
-  email: z.string().email().optional().or(z.literal("")),
-  phone: z.string().max(20).optional().default(""),
+  email: z.string().optional().default(""),
+  phone: z.string().max(30).optional().default(""),
   game_id: z.string().max(50).optional().default(""),
   im_number: z.string().max(50).optional().default(""),
   category: z.enum(["boys", "girls"]).default("boys"),
@@ -61,7 +61,7 @@ const manualTeamSchema = z.object({
   losses: z.number().int().default(0),
   draws: z.number().int().default(0),
   discord: z.string().max(60).optional().default(""),
-  whatsapp: z.string().max(20).optional().default(""),
+  whatsapp: z.string().max(30).optional().default(""),
   players: z.array(manualPlayerSchema).optional().default([]),
 });
 
@@ -79,8 +79,10 @@ export async function POST(req: Request) {
 
     const d = parsed.data;
     const teamSlug = d.team_name.toLowerCase().replace(/[^a-z0-9]/g, "");
-    const captainEmail = (d.email && d.email.trim().length > 0)
-      ? d.email.toLowerCase().trim()
+    const rawEmail = d.email?.trim().toLowerCase() ?? "";
+    const isValidEmail = Boolean(rawEmail && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(rawEmail));
+    const captainEmail = isValidEmail
+      ? rawEmail
       : `leader_${teamSlug || "squad"}_${Date.now().toString().slice(-4)}@codfest.gg`;
 
     // 1. Find or create captain user
