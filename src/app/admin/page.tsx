@@ -146,16 +146,22 @@ export default function AdminPage() {
 
 /* ------------------------------------------------------------------ */
 
-interface AddTeamModalProps {
+/* ------------------------------------------------------------------ */
+
+interface SquadModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onCreated: () => void;
+  onSaved: () => void;
+  allTeams?: any[];
+  editingTeam?: any | null;
 }
 
-function AddTeamModal({ isOpen, onClose, onCreated }: AddTeamModalProps) {
+function SquadModal({ isOpen, onClose, onSaved, allTeams = [], editingTeam = null }: SquadModalProps) {
+  const [selectedTeamId, setSelectedTeamId] = useState<string>(editingTeam?.id || "new");
+
   const [teamName, setTeamName] = useState("");
   const [category, setCategory] = useState<"boys" | "girls">("boys");
-  const [status, setStatus] = useState<"approved" | "pending">("approved");
+  const [status, setStatus] = useState<"approved" | "pending" | "rejected">("approved");
   const [points, setPoints] = useState<number>(0);
   const [wins, setWins] = useState<number>(0);
   const [losses, setLosses] = useState<number>(0);
@@ -168,7 +174,7 @@ function AddTeamModal({ isOpen, onClose, onCreated }: AddTeamModalProps) {
   const [captainGameId, setCaptainGameId] = useState("");
   const [captainIm, setCaptainIm] = useState("");
 
-  // 4 squad members
+  // Squad members
   const [members, setMembers] = useState([
     { player_name: "", game_id: "", phone: "", email: "", im_number: "", is_substitute: false },
     { player_name: "", game_id: "", phone: "", email: "", im_number: "", is_substitute: false },
@@ -179,7 +185,87 @@ function AddTeamModal({ isOpen, onClose, onCreated }: AddTeamModalProps) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const populateFromTeam = (t: any | null) => {
+    if (!t) {
+      setTeamName("");
+      setCategory("boys");
+      setStatus("approved");
+      setPoints(0);
+      setWins(0);
+      setLosses(0);
+      setDraws(0);
+      setCaptainName("");
+      setCaptainEmail("");
+      setCaptainPhone("");
+      setCaptainGameId("");
+      setCaptainIm("");
+      setMembers([
+        { player_name: "", game_id: "", phone: "", email: "", im_number: "", is_substitute: false },
+        { player_name: "", game_id: "", phone: "", email: "", im_number: "", is_substitute: false },
+        { player_name: "", game_id: "", phone: "", email: "", im_number: "", is_substitute: false },
+        { player_name: "", game_id: "", phone: "", email: "", im_number: "", is_substitute: false },
+      ]);
+      return;
+    }
+
+    setTeamName(t.team_name || "");
+    setCategory(t.category || "boys");
+    setStatus(t.status || "approved");
+    setPoints(Number(t.points) || 0);
+    setWins(Number(t.wins) || 0);
+    setLosses(Number(t.losses) || 0);
+    setDraws(Number(t.draws) || 0);
+    setCaptainName(t.captain?.name || t.captain_name || "");
+    setCaptainEmail(t.captain?.email || t.email || "");
+    setCaptainPhone(t.phone || "");
+    setCaptainGameId(t.game_id || "");
+    setCaptainIm(t.im_number || "");
+
+    const pList = (t.players && t.players.length > 0)
+      ? t.players.map((p: any) => ({
+          player_name: p.player_name || "",
+          game_id: p.game_id || "",
+          phone: p.phone || "",
+          email: p.email || "",
+          im_number: p.im_number || "",
+          is_substitute: Boolean(p.is_substitute),
+        }))
+      : [
+          { player_name: "", game_id: "", phone: "", email: "", im_number: "", is_substitute: false },
+          { player_name: "", game_id: "", phone: "", email: "", im_number: "", is_substitute: false },
+          { player_name: "", game_id: "", phone: "", email: "", im_number: "", is_substitute: false },
+          { player_name: "", game_id: "", phone: "", email: "", im_number: "", is_substitute: false },
+        ];
+
+    while (pList.length < 4) {
+      pList.push({ player_name: "", game_id: "", phone: "", email: "", im_number: "", is_substitute: false });
+    }
+    setMembers(pList);
+  };
+
+  useEffect(() => {
+    if (editingTeam) {
+      setSelectedTeamId(editingTeam.id);
+      populateFromTeam(editingTeam);
+    } else {
+      setSelectedTeamId("new");
+      populateFromTeam(null);
+    }
+  }, [editingTeam, isOpen]);
+
+  const handleSelectTeamChange = (id: string) => {
+    setSelectedTeamId(id);
+    if (id === "new") {
+      populateFromTeam(null);
+    } else {
+      const target = allTeams.find((t) => t.id === id);
+      populateFromTeam(target || null);
+    }
+  };
+
   if (!isOpen) return null;
+
+  const isEditing = selectedTeamId !== "new";
 
   const updateMember = (index: number, field: string, value: any) => {
     setMembers((prev) => {
@@ -210,34 +296,40 @@ function AddTeamModal({ isOpen, onClose, onCreated }: AddTeamModalProps) {
 
     try {
       const validPlayers = members.filter((m) => m.player_name.trim().length > 0);
+      const payload: Record<string, any> = {
+        team_name: teamName.trim(),
+        captain_name: captainName.trim(),
+        email: captainEmail.trim(),
+        phone: captainPhone.trim(),
+        game_id: captainGameId.trim(),
+        im_number: captainIm.trim(),
+        category,
+        status,
+        points: Number(points) || 0,
+        wins: Number(wins) || 0,
+        losses: Number(losses) || 0,
+        draws: Number(draws) || 0,
+        players: validPlayers,
+      };
+
+      if (isEditing) {
+        payload.team_id = selectedTeamId;
+      }
+
       const res = await fetch("/api/admin/teams", {
-        method: "POST",
+        method: isEditing ? "PATCH" : "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          team_name: teamName.trim(),
-          captain_name: captainName.trim(),
-          email: captainEmail.trim(),
-          phone: captainPhone.trim(),
-          game_id: captainGameId.trim(),
-          im_number: captainIm.trim(),
-          category,
-          status,
-          points: Number(points) || 0,
-          wins: Number(wins) || 0,
-          losses: Number(losses) || 0,
-          draws: Number(draws) || 0,
-          players: validPlayers,
-        }),
+        body: JSON.stringify(payload),
       });
 
       const json = await res.json();
       if (!res.ok) {
-        setError(json.error ?? "Failed to create squad");
+        setError(json.error ?? (isEditing ? "Failed to update squad" : "Failed to create squad"));
         setBusy(false);
         return;
       }
 
-      onCreated();
+      onSaved();
       onClose();
     } catch (err: any) {
       setError(err.message || "Network error");
@@ -252,10 +344,10 @@ function AddTeamModal({ isOpen, onClose, onCreated }: AddTeamModalProps) {
         <div className="flex items-center justify-between border-b border-night-800 pb-4">
           <div>
             <span className="font-mono text-[10px] uppercase tracking-widest text-ember-400 font-bold">
-              // ADMIN OVERRIDE
+              // SQUAD MANAGEMENT OVERRIDE
             </span>
             <h2 className="font-display text-xl font-bold uppercase text-white">
-              Add Squad Manually
+              {isEditing ? "✏️ Edit Squad & Leader" : "➕ Add Squad Manually"}
             </h2>
           </div>
           <button
@@ -265,6 +357,29 @@ function AddTeamModal({ isOpen, onClose, onCreated }: AddTeamModalProps) {
             ✕
           </button>
         </div>
+
+        {/* TEAM SELECTOR DROPDOWN (Allows picking any squad to edit or switching to create new) */}
+        {allTeams.length > 0 && (
+          <div className="mt-4 rounded-xl border border-ember-500/20 bg-night-850 p-3">
+            <label className="font-mono text-[11px] uppercase font-bold text-zinc-400 mb-1.5 block">
+              Target Squad Mode:
+            </label>
+            <select
+              value={selectedTeamId}
+              onChange={(e) => handleSelectTeamChange(e.target.value)}
+              className="input !py-2 text-xs font-semibold text-white bg-night-950"
+            >
+              <option value="new">➕ [Create New Squad]</option>
+              <optgroup label="── Registered Squads ──">
+                {allTeams.map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {t.team_name} (Leader: {t.captain?.name || "—"}, {t.status})
+                  </option>
+                ))}
+              </optgroup>
+            </select>
+          </div>
+        )}
 
         {error && (
           <div className="mt-4 rounded-lg border border-red-500/40 bg-red-500/10 px-4 py-2.5 font-mono text-xs text-red-300">
@@ -312,6 +427,7 @@ function AddTeamModal({ isOpen, onClose, onCreated }: AddTeamModalProps) {
                 >
                   <option value="approved">Approved (Active immediately)</option>
                   <option value="pending">Pending Approval</option>
+                  <option value="rejected">Rejected</option>
                 </select>
               </div>
 
@@ -498,7 +614,7 @@ function AddTeamModal({ isOpen, onClose, onCreated }: AddTeamModalProps) {
               disabled={busy}
               className="btn-primary !py-2.5 px-6 text-xs font-bold"
             >
-              {busy ? "Creating Squad…" : "✓ Create Squad"}
+              {busy ? "Saving…" : isEditing ? "✓ Save Squad Changes" : "✓ Create Squad"}
             </button>
           </div>
         </form>
@@ -510,7 +626,8 @@ function AddTeamModal({ isOpen, onClose, onCreated }: AddTeamModalProps) {
 function RegistrationsPanel({ onDownloadExcel, exporting }: { onDownloadExcel?: () => void; exporting?: boolean }) {
   const [teams, setTeams] = useState<any[]>([]);
   const [localDownloading, setLocalDownloading] = useState(false);
-  const [showAddModal, setShowAddModal] = useState(false);
+  const [showModal, setShowModal] = useState(false);
+  const [modalTeam, setModalTeam] = useState<any | null>(null);
 
   const load = useCallback(() => {
     fetch("/api/admin/teams").then((r) => r.json()).then((j) => setTeams(j.teams ?? []));
@@ -551,15 +668,25 @@ function RegistrationsPanel({ onDownloadExcel, exporting }: { onDownloadExcel?: 
   const pending = teams.filter((t) => t.status === "pending");
   const others = teams.filter((t) => t.status !== "pending");
 
+  const openCreateModal = () => {
+    setModalTeam(null);
+    setShowModal(true);
+  };
+
+  const openEditModal = (team: any) => {
+    setModalTeam(team);
+    setShowModal(true);
+  };
+
   return (
     <div className="space-y-8">
-      {/* ADD SQUAD MODAL */}
-      <AddTeamModal
-        isOpen={showAddModal}
-        onClose={() => setShowAddModal(false)}
-        onCreated={() => {
-          load();
-        }}
+      {/* SQUAD MANAGEMENT & EDIT MODAL */}
+      <SquadModal
+        isOpen={showModal}
+        onClose={() => setShowModal(false)}
+        onSaved={load}
+        allTeams={teams}
+        editingTeam={modalTeam}
       />
 
       {/* EXPORT & ADD SQUAD BANNER / ACTIONS */}
@@ -577,7 +704,7 @@ function RegistrationsPanel({ onDownloadExcel, exporting }: { onDownloadExcel?: 
         </div>
         <div className="flex flex-wrap items-center gap-3">
           <button
-            onClick={() => setShowAddModal(true)}
+            onClick={openCreateModal}
             className="flex items-center gap-2 rounded-lg border border-amber-500/60 bg-amber-500/20 px-4 py-2.5 font-mono text-xs font-bold text-amber-300 shadow-[0_0_20px_rgba(245,158,11,0.25)] hover:bg-amber-500/30 hover:text-white transition-all"
           >
             ➕ Add Squad Manually
@@ -620,9 +747,16 @@ function RegistrationsPanel({ onDownloadExcel, exporting }: { onDownloadExcel?: 
               <div className="mt-2 text-xs text-zinc-500">
                 Roster: {t.players?.map((p: any) => p.player_name).join(", ") || "—"}
               </div>
-              <div className="mt-4 flex gap-2">
+              <div className="mt-4 flex flex-wrap gap-2">
                 <button className="btn-primary flex-1 !py-2 text-xs" onClick={() => act(t.id, "approve")}>Approve</button>
                 <button className="btn-ghost flex-1 !py-2 text-xs !text-red-300 hover:!border-red-500" onClick={() => act(t.id, "reject")}>Reject</button>
+                <button
+                  className="rounded border border-amber-500/50 bg-amber-500/15 px-3 py-2 font-mono text-xs font-bold text-amber-300 hover:bg-amber-500/25 transition-all"
+                  onClick={() => openEditModal(t)}
+                  title="Edit team, leader, and squad members"
+                >
+                  ✏️ Edit Squad
+                </button>
               </div>
             </div>
           ))}
@@ -633,10 +767,17 @@ function RegistrationsPanel({ onDownloadExcel, exporting }: { onDownloadExcel?: 
         <h2 className="font-display text-lg font-bold uppercase text-white">All teams</h2>
         <div className="card mt-4 divide-y divide-night-800">
           {others.map((t) => (
-            <div key={t.id} className="flex items-center justify-between px-4 py-3">
+            <div key={t.id} className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
               <TeamMark name={t.team_name} logoUrl={t.logo_url} size={28} />
               <div className="flex items-center gap-3">
                 <StatusBadge status={t.status} />
+                <button
+                  className="rounded border border-amber-500/40 bg-amber-500/10 px-3 py-1 font-mono text-xs font-bold text-amber-300 hover:bg-amber-500/20 transition-all"
+                  onClick={() => openEditModal(t)}
+                  title="Edit team, leader, and squad members"
+                >
+                  ✏️ Edit
+                </button>
                 {t.status === "rejected" && (
                   <button className="font-mono text-xs font-bold uppercase text-ember-500 hover:text-ember-400" onClick={() => act(t.id, "approve")}>
                     Approve instead
@@ -2594,10 +2735,8 @@ function TeamsControlPanel({ onDownloadExcel, exporting }: { onDownloadExcel?: (
   const [loading,    setLoading]    = useState(true);
   const [search,     setSearch]     = useState("");
   const [filterStat, setFilterStat] = useState<TeamStatus | "all">("all");
-  const [editing,    setEditing]    = useState<TeamFull | null>(null);
-  const [editName,   setEditName]   = useState("");
-  const [editBusy,   setEditBusy]   = useState(false);
-  const [editMsg,    setEditMsg]    = useState<string | null>(null);
+  const [showModal,  setShowModal]  = useState(false);
+  const [modalTeam,  setModalTeam]  = useState<any | null>(null);
   const [actionMsg,  setActionMsg]  = useState<string | null>(null);
 
   const load = useCallback(async () => {
@@ -2617,25 +2756,15 @@ function TeamsControlPanel({ onDownloadExcel, exporting }: { onDownloadExcel?: (
     load();
   }
 
-  async function saveEdit() {
-    if (!editing || !editName.trim()) return;
-    setEditBusy(true);
-    setEditMsg(null);
-    const res = await fetch(`/api/teams/${editing.id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ team_name: editName.trim() }),
-    });
-    setEditBusy(false);
-    if (res.ok) {
-      setEditMsg("✓ Team name updated.");
-      load();
-      setTimeout(() => { setEditing(null); setEditMsg(null); }, 1500);
-    } else {
-      const j = await res.json();
-      setEditMsg(j.error ?? "Failed to update.");
-    }
-  }
+  const openCreateModal = () => {
+    setModalTeam(null);
+    setShowModal(true);
+  };
+
+  const openEditModal = (team: any) => {
+    setModalTeam(team);
+    setShowModal(true);
+  };
 
   const filtered = teams.filter((t) => {
     const matchStatus = filterStat === "all" || t.status === filterStat;
@@ -2655,21 +2784,38 @@ function TeamsControlPanel({ onDownloadExcel, exporting }: { onDownloadExcel?: (
 
   return (
     <div className="space-y-6">
-      {/* Top Header with Excel Export */}
+      {/* SQUAD MANAGEMENT & EDIT MODAL */}
+      <SquadModal
+        isOpen={showModal}
+        onClose={() => setShowModal(false)}
+        onSaved={load}
+        allTeams={teams}
+        editingTeam={modalTeam}
+      />
+
+      {/* Top Header with Excel Export and Add Squad */}
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-night-800 pb-3">
         <div>
           <h2 className="font-display text-base font-bold uppercase text-white">Teams Registry</h2>
           <p className="font-mono text-xs text-zinc-400">Total registered teams: {teams.length}</p>
         </div>
-        {onDownloadExcel && (
+        <div className="flex flex-wrap items-center gap-3">
           <button
-            onClick={onDownloadExcel}
-            disabled={exporting}
-            className="flex items-center gap-2 rounded-lg border border-emerald-500/50 bg-emerald-600/15 px-3.5 py-1.5 font-mono text-xs font-bold text-emerald-300 hover:bg-emerald-600/25 transition-all disabled:opacity-50"
+            onClick={openCreateModal}
+            className="flex items-center gap-2 rounded-lg border border-amber-500/60 bg-amber-500/20 px-3.5 py-1.5 font-mono text-xs font-bold text-amber-300 hover:bg-amber-500/30 hover:text-white transition-all shadow-[0_0_15px_rgba(245,158,11,0.2)]"
           >
-            {exporting ? "Exporting…" : "📥 Export Excel (.xlsx)"}
+            ➕ Add Squad Manually
           </button>
-        )}
+          {onDownloadExcel && (
+            <button
+              onClick={onDownloadExcel}
+              disabled={exporting}
+              className="flex items-center gap-2 rounded-lg border border-emerald-500/50 bg-emerald-600/15 px-3.5 py-1.5 font-mono text-xs font-bold text-emerald-300 hover:bg-emerald-600/25 transition-all disabled:opacity-50"
+            >
+              {exporting ? "Exporting…" : "📥 Export Excel (.xlsx)"}
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Stats row */}
@@ -2706,14 +2852,14 @@ function TeamsControlPanel({ onDownloadExcel, exporting }: { onDownloadExcel?: (
       <div className="flex flex-wrap items-center gap-3">
         <input
           className="input flex-1 min-w-48"
-          placeholder="Search by team name or captainâ€¦"
+          placeholder="Search by team name or captain…"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
         />
         {actionMsg && <span className="font-mono text-xs text-green-400">{actionMsg}</span>}
       </div>
 
-      {loading && <p className="py-10 text-center text-sm text-zinc-500 animate-pulse">Loading teamsâ€¦</p>}
+      {loading && <p className="py-10 text-center text-sm text-zinc-500 animate-pulse">Loading teams…</p>}
 
       {/* Team list */}
       {!loading && (
@@ -2730,7 +2876,7 @@ function TeamsControlPanel({ onDownloadExcel, exporting }: { onDownloadExcel?: (
                   <div className="min-w-0">
                     <div className="font-display font-bold text-white truncate">{t.team_name}</div>
                     <div className="font-mono text-[11px] text-zinc-500 truncate">
-                      Captain: {t.captain?.name ?? "â€”"} Â· {t.captain?.email ?? "â€”"}
+                      Captain: {t.captain?.name ?? "—"} · {t.captain?.email ?? "—"}
                     </div>
                   </div>
                 </div>
@@ -2743,7 +2889,7 @@ function TeamsControlPanel({ onDownloadExcel, exporting }: { onDownloadExcel?: (
                       onClick={() => act(t.id, "approve")}
                       className="rounded border border-green-600/40 bg-green-600/10 px-3 py-1 font-mono text-xs font-bold text-green-400 hover:bg-green-600/20 transition-colors"
                     >
-                      âœ“ Approve
+                      ✓ Approve
                     </button>
                   )}
                   {t.status !== "rejected" && (
@@ -2751,47 +2897,19 @@ function TeamsControlPanel({ onDownloadExcel, exporting }: { onDownloadExcel?: (
                       onClick={() => act(t.id, "reject")}
                       className="rounded border border-red-600/40 bg-red-600/10 px-3 py-1 font-mono text-xs font-bold text-red-400 hover:bg-red-600/20 transition-colors"
                     >
-                      âœ• Reject
+                      ✕ Reject
                     </button>
                   )}
 
                   <button
-                    onClick={() => { setEditing(t); setEditName(t.team_name); setEditMsg(null); }}
-                    className="rounded border border-night-600 bg-night-800 px-3 py-1 font-mono text-xs text-zinc-300 hover:border-night-500 hover:text-white transition-colors"
+                    onClick={() => openEditModal(t)}
+                    className="rounded border border-amber-500/50 bg-amber-500/15 px-3 py-1 font-mono text-xs font-bold text-amber-300 hover:bg-amber-500/25 transition-colors"
+                    title="Edit team details, leader, and squad members"
                   >
-                    âœ Edit
+                    ✏️ Edit Squad
                   </button>
                 </div>
               </div>
-
-              {/* Inline edit form */}
-              {editing?.id === t.id && (
-                <div className="px-5 py-4 bg-night-850">
-                  <label className="label mb-1">Team name</label>
-                  <div className="flex flex-wrap items-center gap-2">
-                    <input
-                      className="input flex-1 min-w-40"
-                      value={editName}
-                      onChange={(e) => setEditName(e.target.value)}
-                      onKeyDown={(e) => e.key === "Enter" && saveEdit()}
-                    />
-                    <button className="btn-primary !py-2 !px-4 text-xs" onClick={saveEdit} disabled={editBusy}>
-                      {editBusy ? "Savingâ€¦" : "Save"}
-                    </button>
-                    <button
-                      className="btn-ghost !py-2 !px-3 text-xs"
-                      onClick={() => { setEditing(null); setEditMsg(null); }}
-                    >
-                      Cancel
-                    </button>
-                  </div>
-                  {editMsg && (
-                    <p className={`mt-2 font-mono text-xs ${editMsg.startsWith("âœ“") ? "text-green-400" : "text-red-400"}`}>
-                      {editMsg}
-                    </p>
-                  )}
-                </div>
-              )}
 
               {/* Roster */}
               {t.players && t.players.length > 0 && (
@@ -2809,7 +2927,7 @@ function TeamsControlPanel({ onDownloadExcel, exporting }: { onDownloadExcel?: (
                       >
                         {p.player_name}
                         {p.is_substitute && <span className="ml-1 text-zinc-600">(sub)</span>}
-                        {p.game_id && <span className="ml-1 text-zinc-600">Â· {p.game_id}</span>}
+                        {p.game_id && <span className="ml-1 text-zinc-600">· {p.game_id}</span>}
                       </span>
                     ))}
                   </div>
@@ -2818,10 +2936,10 @@ function TeamsControlPanel({ onDownloadExcel, exporting }: { onDownloadExcel?: (
 
               {/* Contact + meta */}
               <div className="flex flex-wrap gap-x-6 gap-y-1 px-5 py-3 text-[11px] text-zinc-500">
-                {t.phone    && <span>ðŸ“ž {t.phone}</span>}
-                {t.email    && <span>âœ‰ {t.email}</span>}
-                {t.discord  && <span>ðŸŽ® {t.discord}</span>}
-                {t.whatsapp && <span>ðŸ’¬ {t.whatsapp}</span>}
+                {t.phone    && <span>📞 {t.phone}</span>}
+                {t.email    && <span>✉ {t.email}</span>}
+                {t.discord  && <span>🎮 {t.discord}</span>}
+                {t.whatsapp && <span>💬 {t.whatsapp}</span>}
                 <span className="ml-auto">Registered {new Date(t.created_at).toLocaleDateString("en-IN")}</span>
               </div>
             </div>

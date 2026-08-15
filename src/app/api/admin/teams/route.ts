@@ -39,6 +39,7 @@ export async function GET() {
 }
 
 const manualPlayerSchema = z.object({
+  id: z.string().optional(),
   player_name: z.string().min(1).max(50),
   game_id: z.string().max(50).optional().default(""),
   email: z.string().optional().default(""),
@@ -63,6 +64,10 @@ const manualTeamSchema = z.object({
   discord: z.string().max(60).optional().default(""),
   whatsapp: z.string().max(30).optional().default(""),
   players: z.array(manualPlayerSchema).optional().default([]),
+});
+
+const updateTeamSchema = manualTeamSchema.extend({
+  team_id: z.string().min(1),
 });
 
 /** Admin — manually create a squad with full roster and stats. */
@@ -183,6 +188,111 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: true, team }, { status: 201 });
   } catch (err: any) {
     console.error("[POST /api/admin/teams error]", err);
+    return NextResponse.json({ error: err?.message || "Internal server error" }, { status: 500 });
+  }
+}
+
+/** Admin — edit any registered team, captain details, and full player roster. */
+export async function PATCH(req: Request) {
+  try {
+    const admin = await requireRole("admin");
+    if (!admin) return NextResponse.json({ error: "Admin only" }, { status: 403 });
+
+    const body = await req.json().catch(() => null);
+    const parsed = updateTeamSchema.safeParse(body);
+    if (!parsed.success) {
+      return NextResponse.json({ error: "Invalid input", details: parsed.error.flatten() }, { status: 400 });
+    }
+
+    const d = parsed.data;
+
+    // 1. Fetch team
+    const { data: team, error: lookupErr } = await db()
+      .from("teams")
+      .select("id, captain_id")
+      .eq("id", d.team_id)
+      .single();
+
+    if (lookupErr || !team) {
+      return NextResponse.json({ error: "Team not found" }, { status: 404 });
+    }
+
+    // 2. Update leader name and email on users table if captain exists
+    if (team.captain_id) {
+      const userUpdates: Record<string, any> = { name: d.captain_name.trim() };
+      const rawEmail = d.email?.trim().toLowerCase() ?? "";
+      if (rawEmail && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(rawEmail)) {
+        userUpdates.email = rawEmail;
+      }
+      await db().from("users").update(userUpdates).eq("id", team.captain_id);
+    }
+
+    // 3. Update team fields
+    const teamUpdates: Record<string, any> = {
+      team_name: d.team_name.trim(),
+      phone: d.phone ?? "",
+      status: d.status,
+      points: d.points,
+      wins: d.wins,
+      losses: d.losses,
+      draws: d.draws,
+      discord: d.discord ?? "",
+      whatsapp: d.whatsapp ?? "",
+    };
+    if (d.email?.trim()) {
+      teamUpdates.email = d.email.trim();
+    }
+    const { error: teamErr } = await db().from("teams").update(teamUpdates).eq("id", d.team_id);
+    if (teamErr) {
+      return NextResponse.json({ error: teamErr.message }, { status: 500 });
+    }
+
+    // 4. Update players roster: delete old players and insert new ones
+    if (d.players) {
+      await db().from("players").delete().eq("team_id", d.team_id);
+      if (d.players.length > 0) {
+        await db().from("players").insert(
+          d.players.map((p) => ({
+            team_id: d.team_id,
+            player_name: p.player_name.trim(),
+            email: p.email || "",
+            phone: p.phone || "",
+            im_number: p.im_number || "",
+            game_id: p.game_id || "",
+            is_substitute: p.is_substitute,
+          }))
+        );
+      }
+    }
+
+    // 5. Update settings metadata (leader game ID, IM, division category)
+    const settings = await getSystemSettings();
+    const leaderGameIds = { ...(settings.leader_game_ids ?? {}) };
+    const leaderImNumbers = { ...(settings.leader_im_numbers ?? {}) };
+    const teamCategories = { ...(settings.team_categories ?? {}) };
+
+    leaderGameIds[d.team_id] = d.game_id ? d.game_id.trim() : "";
+    leaderImNumbers[d.team_id] = d.im_number ? d.im_number.trim() : "";
+    teamCategories[d.team_id] = d.category;
+
+    await updateSystemSettings({
+      leader_game_ids: leaderGameIds,
+      leader_im_numbers: leaderImNumbers,
+      team_categories: teamCategories,
+    });
+
+    // 6. Refresh leaderboard and emit
+    const leaderboard = await getLeaderboard();
+    emitEvent("leaderboard:updated", { leaderboard });
+    await logAudit(admin.id, "team.updated_by_admin", d.team_id, {
+      team_name: d.team_name,
+      category: d.category,
+      players_count: d.players.length,
+    });
+
+    return NextResponse.json({ ok: true });
+  } catch (err: any) {
+    console.error("[PATCH /api/admin/teams error]", err);
     return NextResponse.json({ error: err?.message || "Internal server error" }, { status: 500 });
   }
 }
