@@ -146,16 +146,28 @@ export default function LeaderboardPage() {
   const boysCount = (boysRows.length > 0 ? boysRows : rows.filter((r) => r.category === "boys")).length;
   const girlsCount = (girlsRows.length > 0 ? girlsRows : rows.filter((r) => r.category === "girls")).length;
 
+  // Client-side sort to guarantee wins→losses→played ordering for division views
+  const sortByRecord = (list: LeaderboardRow[]) =>
+    [...list].sort((a, b) =>
+      (b.wins - a.wins) ||
+      (a.losses - b.losses) ||
+      (b.played - a.played) ||
+      ((b.maps_won - b.maps_lost) - (a.maps_won - a.maps_lost)) ||
+      a.team_name.localeCompare(b.team_name)
+    ).map((t, i) => ({ ...t, rank: i + 1 }));
+
   const displayRows = useMemo(() => {
     if (division === "boys") {
-      return boysRows.length > 0
+      const base = boysRows.length > 0
         ? boysRows
-        : rows.filter((r) => (r.category ?? "boys") === "boys").map((r, i) => ({ ...r, rank: i + 1 }));
+        : rows.filter((r) => (r.category ?? "boys") === "boys");
+      return sortByRecord(base);
     }
     if (division === "girls") {
-      return girlsRows.length > 0
+      const base = girlsRows.length > 0
         ? girlsRows
-        : rows.filter((r) => r.category === "girls").map((r, i) => ({ ...r, rank: i + 1 }));
+        : rows.filter((r) => r.category === "girls");
+      return sortByRecord(base);
     }
     return rows;
   }, [rows, boysRows, girlsRows, division]);
@@ -676,8 +688,8 @@ export default function LeaderboardPage() {
           <div className="font-mono text-xs text-zinc-400">
             {viewMode === "standings"
               ? division === "all"
-                ? "Ranking by Team Cumulative Score"
-                : `Ranking strictly by Match Wins & Losses (${division === "boys" ? "Boys" : "Girls"} Division)`
+                ? "Ranked by Wins → Losses → Matches Played"
+                : `${division === "boys" ? "Boys" : "Girls"} Division — Ranked by Wins → Losses → Matches Played`
               : "Auto-Calculated by Total Player Kills"}
           </div>
         </div>
@@ -964,15 +976,15 @@ export default function LeaderboardPage() {
             <div>
               <h2 className="section-title text-lg sm:text-xl">
                 {division === "boys"
-                  ? "Boys Division Standings (Ranked by W-L Record)"
+                  ? "Boys Division Standings (W → L → Played)"
                   : division === "girls"
-                  ? "Girls Division Standings (Ranked by W-L Record)"
-                  : "Overall Team Standings"}
+                  ? "Girls Division Standings (W → L → Played)"
+                  : "Overall Team Standings (W → L → Played)"}
               </h2>
               <p className="font-mono text-xs text-zinc-400">
                 {division === "all"
-                  ? "Showing all registered teams across all divisions (ranked by cumulative player score)"
-                  : `Official ${division === "boys" ? "Boys" : "Girls"} division standings ranked strictly by Match Wins and Losses (W–L Record)`}
+                  ? "All divisions ranked by Wins (high → low) then Losses (low → high) then Matches Played"
+                  : `${division === "boys" ? "Boys" : "Girls"} division — ranked by Wins (high → low), then Losses (low → high), then Matches Played`}
               </p>
             </div>
             <span className="font-mono text-xs text-zinc-400">
@@ -1031,9 +1043,10 @@ export default function LeaderboardPage() {
                       </div>
                     </div>
 
-                    <div className="text-right flex-shrink-0 bg-night-800/90 border border-night-700 px-2.5 py-1 rounded-lg">
-                      <span className="font-mono text-base font-black text-amber-400">{r.points}</span>
-                      <span className="font-mono text-[9px] text-zinc-500 ml-1">PTS</span>
+                    {/* Wins — primary stat shown bold & prominent */}
+                    <div className="text-right flex-shrink-0 bg-night-800/90 border border-green-500/30 px-2.5 py-1 rounded-lg">
+                      <span className="font-mono text-base font-black text-green-400">{r.wins}</span>
+                      <span className="font-mono text-[9px] text-zinc-500 ml-1">W</span>
                     </div>
                   </div>
 
@@ -1044,9 +1057,9 @@ export default function LeaderboardPage() {
                       <div className="font-bold text-zinc-300 mt-0.5">{r.played}</div>
                     </div>
                     <div className="bg-night-900/60 p-1.5 rounded border border-night-800">
-                      <div className="text-zinc-500 text-[9px] uppercase">W - L - D</div>
+                      <div className="text-zinc-500 text-[9px] uppercase">L - D</div>
                       <div className="font-bold text-white mt-0.5">
-                        <span className="text-green-400">{r.wins}</span>-<span className="text-red-400">{r.losses}</span>-<span className="text-zinc-400">{r.draws}</span>
+                        <span className="text-red-400">{r.losses}</span>-<span className="text-zinc-400">{r.draws}</span>
                       </div>
                     </div>
                     <div className="bg-night-900/60 p-1.5 rounded border border-night-800">
@@ -1054,8 +1067,8 @@ export default function LeaderboardPage() {
                       <div className="font-bold text-zinc-200 mt-0.5">{r.win_rate}%</div>
                     </div>
                     <div className="bg-night-900/60 p-1.5 rounded border border-night-800">
-                      <div className="text-zinc-500 text-[9px] uppercase">Maps</div>
-                      <div className="font-bold text-zinc-300 mt-0.5">{r.maps_won}–{r.maps_lost}</div>
+                      <div className="text-zinc-500 text-[9px] uppercase">PTS</div>
+                      <div className="text-zinc-400 mt-0.5">{r.points}</div>
                     </div>
                   </div>
                 </div>
@@ -1071,13 +1084,13 @@ export default function LeaderboardPage() {
                   <th className="px-5 py-4 w-16">#</th>
                   <th className="px-5 py-4">Team</th>
                   <th className="px-4 py-4 text-center w-24">Division</th>
-                  <th className="px-4 py-4 text-center w-24">PTS</th>
-                  <th className="px-4 py-4 text-center w-20">Played</th>
-                  <th className="px-4 py-4 text-center w-16 text-green-400">W</th>
+                  <th className="px-4 py-4 text-center w-16 text-green-400">Wins ↓</th>
                   <th className="px-4 py-4 text-center w-16 text-red-400">L</th>
                   <th className="px-4 py-4 text-center w-16 text-zinc-400">D</th>
-                  <th className="px-4 py-4 text-center w-24">Win rate</th>
+                  <th className="px-4 py-4 text-center w-20">Played</th>
+                  <th className="px-4 py-4 text-center w-24">Win %</th>
                   <th className="px-4 py-4 text-center w-28">Maps (W–L)</th>
+                  <th className="px-4 py-4 text-center w-24 text-zinc-500">PTS</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-night-800">
@@ -1139,15 +1152,15 @@ export default function LeaderboardPage() {
                             </span>
                           )}
                         </td>
-                        <td className="px-4 py-4 text-center text-xl font-black text-amber-400">{r.points}</td>
-                        <td className="px-4 py-4 text-center text-zinc-400">{r.played}</td>
-                        <td className="px-4 py-4 text-center font-bold text-green-400">{r.wins}</td>
+                        <td className="px-4 py-4 text-center text-2xl font-black text-green-400">{r.wins}</td>
                         <td className="px-4 py-4 text-center font-bold text-red-400">{r.losses}</td>
                         <td className="px-4 py-4 text-center font-bold text-zinc-400">{r.draws}</td>
+                        <td className="px-4 py-4 text-center text-zinc-400">{r.played}</td>
                         <td className="px-4 py-4 text-center font-bold text-zinc-200">{r.win_rate}%</td>
                         <td className="px-4 py-4 text-center text-zinc-400">
                           {r.maps_won}–{r.maps_lost}
                         </td>
+                        <td className="px-4 py-4 text-center text-zinc-500 font-normal">{r.points}</td>
                       </tr>
                     );
                   })
